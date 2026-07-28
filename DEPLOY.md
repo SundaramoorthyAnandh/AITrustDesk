@@ -61,6 +61,9 @@ git push -u origin main
 - **Real LLM instead of mock:** set `LLM_PROVIDER=langchain` + `OPENAI_BASE_URL` / `OPENAI_API_KEY` /
   `MODEL_NAME` on `trustdesk-api` to point at a hosted OpenAI-compatible endpoint (LM Studio on your
   laptop is not reachable from Render).
+- **Node version:** pinned to 22 via [`.node-version`](.node-version). `better-sqlite3` is a native
+  module with no prebuilt binary for very new Node (e.g. 26), so leaving the version unpinned makes the
+  build fail — keep the pin.
 - **Auto-deploy:** pushing to `main` redeploys all three services.
 - **Persistence:** if you later want visitor data to survive restarts on free tier, migrate the store
   to Turso/libSQL (Drizzle supports it) and set `SEED_ON_BOOT=false`.

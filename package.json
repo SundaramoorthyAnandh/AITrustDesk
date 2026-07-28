@@ -24,6 +24,6 @@
     "build:web": "npm run build -w web/customer-portal && npm run build -w web/agent-portal"
   },
   "engines": {
-    "node": ">=20.11.0"
+    "node": ">=20.11.0 <23"
   }
 }
