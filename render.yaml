@@ -42,7 +42,6 @@ services:
   - type: web
     name: trustdesk-customer
     runtime: static
-    plan: free
     rootDir: .
     buildCommand: npm install && npm run build -w web/customer-portal
     staticPublishPath: web/customer-portal/dist
@@ -61,7 +60,6 @@ services:
   - type: web
     name: trustdesk-agent
     runtime: static
-    plan: free
     rootDir: .
     buildCommand: npm install && npm run build -w web/agent-portal
     staticPublishPath: web/agent-portal/dist
