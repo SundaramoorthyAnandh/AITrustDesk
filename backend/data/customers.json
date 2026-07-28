@@ -1,0 +1,10 @@
+[
+  { "id": "CUST-1001", "name": "Alice Johnson", "email": "alice.johnson@example.com", "phone": "+1-202-555-0101", "email_verified": true, "identity_verified": true, "created_at": "2025-01-12T09:00:00.000Z" },
+  { "id": "CUST-1002", "name": "Bob Smith", "email": "bob.smith@example.com", "phone": "+1-202-555-0102", "email_verified": true, "identity_verified": false, "created_at": "2025-02-03T14:30:00.000Z" },
+  { "id": "CUST-1003", "name": "Carla Diaz", "email": "carla.diaz@example.com", "phone": "+1-202-555-0103", "email_verified": true, "identity_verified": true, "created_at": "2025-03-21T11:15:00.000Z" },
+  { "id": "CUST-1004", "name": "David Lee", "email": "david.lee@example.com", "phone": "+1-202-555-0104", "email_verified": false, "identity_verified": false, "created_at": "2025-04-08T08:45:00.000Z" },
+  { "id": "CUST-1005", "name": "Emma Wilson", "email": "emma.wilson@example.com", "phone": "+1-202-555-0105", "email_verified": true, "identity_verified": true, "created_at": "2025-05-19T16:20:00.000Z" },
+  { "id": "CUST-1006", "name": "Frank Moore", "email": "frank.moore@example.com", "phone": "+1-202-555-0106", "email_verified": true, "identity_verified": false, "created_at": "2025-06-30T10:05:00.000Z" },
+  { "id": "CUST-1007", "name": "Grace Kim", "email": "grace.kim@example.com", "phone": "+1-202-555-0107", "email_verified": true, "identity_verified": true, "created_at": "2025-07-14T13:40:00.000Z" },
+  { "id": "CUST-1008", "name": "Henry Patel", "email": "henry.patel@example.com", "phone": "+1-202-555-0108", "email_verified": true, "identity_verified": true, "created_at": "2025-08-25T12:00:00.000Z" }
+]

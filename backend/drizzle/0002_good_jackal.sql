@@ -1,0 +1,1 @@
+ALTER TABLE `tool_catalog` ADD `label` text;

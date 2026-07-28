@@ -1,0 +1,29 @@
+{
+  "name": "trustdesk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TrustDesk — AI support-operations agent (backend + Customer Complaint Portal + Agent Portal).",
+  "workspaces": [
+    "backend",
+    "web/customer-portal",
+    "web/agent-portal"
+  ],
+  "scripts": {
+    "load": "npm run load -w backend",
+    "eval": "npm run eval -w backend",
+    "test": "npm test -w backend",
+    "db:generate": "npm run db:generate -w backend",
+    "db:migrate": "npm run db:migrate -w backend",
+    "dev:api": "npm run dev -w backend",
+    "dev:customer": "npm run dev -w web/customer-portal",
+    "dev:agent": "npm run dev -w web/agent-portal",
+    "dev:all": "bash run.sh",
+    "start": "bash run.sh",
+    "stop": "bash stop.sh",
+    "build:web": "npm run build -w web/customer-portal && npm run build -w web/agent-portal"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}

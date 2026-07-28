@@ -1,0 +1,78 @@
+# Render Blueprint — TrustDesk (free tier, one platform / three services)
+#
+#   • trustdesk-api       Node web service (Fastify + SQLite). Free tier has an
+#                         EPHEMERAL disk, so SEED_ON_BOOT reseeds on every start.
+#   • trustdesk-customer  Static site (Customer Complaint Portal).
+#   • trustdesk-agent     Static site (Agent Console).
+#
+# The static sites receive the API host via `fromService`; the frontend prepends
+# https:// automatically. CORS on the API allows any *.onrender.com origin, so no
+# manual URL wiring is needed. See DEPLOY.md for click-by-click steps.
+
+services:
+  - type: web
+    name: trustdesk-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install
+    startCommand: npm run start -w backend
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SEED_ON_BOOT
+        value: "true"
+      - key: LLM_PROVIDER
+        value: mock
+      - key: CORS_ORIGINS
+        value: https://*.onrender.com
+      - key: ACCESS_TOKEN_TTL
+        value: "900"
+      - key: REFRESH_TOKEN_TTL
+        value: "1209600"
+      - key: SEED_DEFAULT_PASSWORD
+        value: Password123!
+      - key: CUSTOMER_JWT_SECRET
+        generateValue: true
+      - key: AGENT_JWT_SECRET
+        generateValue: true
+
+  - type: web
+    name: trustdesk-customer
+    runtime: static
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm run build -w web/customer-portal
+    staticPublishPath: web/customer-portal/dist
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: trustdesk-api
+          type: web
+          property: host
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
+    name: trustdesk-agent
+    runtime: static
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm run build -w web/agent-portal
+    staticPublishPath: web/agent-portal/dist
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: trustdesk-api
+          type: web
+          property: host
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

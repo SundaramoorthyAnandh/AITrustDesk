@@ -1,0 +1,55 @@
+[
+  {
+    "name": "start_refund_review",
+    "label": "Start Refund Review",
+    "description": "Open a refund review for an order. Recommends a refund amount for human approval; never moves money on its own.",
+    "sensitive": true,
+    "requires_approval": true,
+    "args_schema": {
+      "type": "object",
+      "required": [
+        "order_id",
+        "amount_cents",
+        "reason"
+      ],
+      "properties": {
+        "order_id": {
+          "type": "string"
+        },
+        "amount_cents": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  {
+    "name": "create_replacement_order",
+    "label": "Create Replacement Order",
+    "description": "Create a no-charge replacement order for the same SKU on a defective/lost item. Requires human approval before it ships.",
+    "sensitive": true,
+    "requires_approval": true,
+    "args_schema": {
+      "type": "object",
+      "required": [
+        "order_id",
+        "sku",
+        "reason"
+      ],
+      "properties": {
+        "order_id": {
+          "type": "string"
+        },
+        "sku": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    }
+  }
+]

@@ -1,0 +1,174 @@
+import { useEffect, useState } from 'react';
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  LinearProgress,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import { api, pollJob, type EvalSummary } from '../api';
+
+const METRIC_LABELS: Record<string, string> = {
+  triageAccuracy: 'Triage accuracy',
+  priorityAccuracy: 'Priority accuracy',
+  citationCoverage: 'Citation coverage',
+  unsafeActionBlockingRate: 'Unsafe-action blocking',
+  escalationBehavior: 'Escalation behavior',
+};
+
+function MetricTile({ label, value, denom }: { label: string; value: number; denom?: number }) {
+  const color = value >= 90 ? 'success.main' : value >= 70 ? 'warning.main' : 'error.main';
+  return (
+    <Card variant="outlined" sx={{ flex: 1, minWidth: 170 }}>
+      <CardContent>
+        <Typography variant="caption" color="text.secondary">
+          {label}
+        </Typography>
+        <Typography variant="h4" sx={{ color, fontWeight: 700 }}>
+          {value}%
+        </Typography>
+        {denom != null && (
+          <Typography variant="caption" color="text.secondary">
+            n = {denom}
+          </Typography>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function EvalPage() {
+  const [summary, setSummary] = useState<EvalSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+
+  const loadLatest = () =>
+    api
+      .latestEval()
+      .then((r) => setSummary(r.run?.summary ?? null))
+      .catch((e) => setError(e.message));
+
+  useEffect(() => {
+    loadLatest();
+  }, []);
+
+  const run = async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      const { jobId } = await api.runEval();
+      const result = await pollJob<EvalSummary>(jobId, 60_000);
+      setSummary(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Eval failed');
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Stack spacing={3}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Typography variant="h5">Evaluation harness</Typography>
+        <Button variant="contained" startIcon={<PlayArrowIcon />} onClick={run} disabled={running}>
+          {running ? 'Running…' : 'Run eval'}
+        </Button>
+      </Stack>
+
+      {running && <LinearProgress />}
+      {error && <Alert severity="error">{error}</Alert>}
+
+      {!summary && !running && <Alert severity="info">No evaluation run yet. Click “Run eval”.</Alert>}
+
+      {summary && (
+        <>
+          <Typography variant="body2" color="text.secondary">
+            Provider: <strong>{summary.provider}</strong> · {summary.totalCases} cases
+          </Typography>
+          <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+            {Object.entries(summary.metrics).map(([k, v]) => (
+              <MetricTile key={k} label={METRIC_LABELS[k] ?? k} value={v} denom={summary.denominators[metricDenomKey(k)]} />
+            ))}
+          </Stack>
+
+          <Paper variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Case</TableCell>
+                  <TableCell>Category</TableCell>
+                  <TableCell>Priority</TableCell>
+                  <TableCell>Draft status</TableCell>
+                  <TableCell>Escalated</TableCell>
+                  <TableCell>Guardrail</TableCell>
+                  <TableCell>Citations</TableCell>
+                  <TableCell>Checks</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {summary.cases.map((c) => {
+                  const failed = Object.values(c.checks).some((v) => v === false);
+                  return (
+                    <TableRow key={c.id} sx={failed ? { bgcolor: 'rgba(248,113,113,0.12)' } : undefined}>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={600}>
+                          {c.id}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {c.description}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{c.predictedCategory}</TableCell>
+                      <TableCell>{c.predictedPriority}</TableCell>
+                      <TableCell>{c.draftStatus}</TableCell>
+                      <TableCell>{c.systemEscalated ? 'yes' : 'no'}</TableCell>
+                      <TableCell>{c.guardrailKind}</TableCell>
+                      <TableCell>{c.citations.join(', ') || '—'}</TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                          {Object.entries(c.checks)
+                            .filter(([, v]) => v !== null)
+                            .map(([k, v]) => (
+                              <Chip
+                                key={k}
+                                size="small"
+                                label={k.replace('Correct', '').replace('Covered', '')}
+                                color={v ? 'success' : 'error'}
+                                variant="outlined"
+                                sx={{ height: 18, fontSize: 10 }}
+                              />
+                            ))}
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Paper>
+        </>
+      )}
+    </Stack>
+  );
+}
+
+function metricDenomKey(metric: string): string {
+  const map: Record<string, string> = {
+    triageAccuracy: 'triage',
+    priorityAccuracy: 'priority',
+    citationCoverage: 'citation',
+    unsafeActionBlockingRate: 'unsafeAction',
+    escalationBehavior: 'escalation',
+  };
+  return map[metric] ?? metric;
+}
