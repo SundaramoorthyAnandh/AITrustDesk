@@ -1,0 +1,27 @@
+# Keep build context small and avoid copying host artifacts into images.
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+
+# Local databases (images seed their own on boot)
+*.sqlite
+*.sqlite-*
+**/*.db
+**/*.db-*
+backend/trustdesk.db*
+
+# VCS / editor / OS
+.git
+.gitignore
+.idea
+.vscode
+.DS_Store
+
+# Docs & scratch not needed at build time
+*.md
+!README.md

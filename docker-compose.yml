@@ -1,0 +1,56 @@
+# TrustDesk — full stack in three containers.
+#   docker compose up --build
+# Then: Customer http://localhost:8080 · Agent http://localhost:8081 · API http://localhost:4000
+#
+# The browser (host) reaches the API on the published port 4000, so the portals are
+# built with VITE_API_URL=http://localhost:4000 and the API's CORS allows those origins.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: trustdesk-api
+    environment:
+      NODE_ENV: production
+      SEED_ON_BOOT: "true"          # ephemeral container FS → reseed on boot
+      LLM_PROVIDER: mock
+      HOST: 0.0.0.0
+      PORT: "4000"
+      CORS_ORIGINS: "http://localhost:8080,http://localhost:8081"
+      # Demo secrets — override for anything non-local.
+      CUSTOMER_JWT_SECRET: "dev-customer-secret-change-me"
+      AGENT_JWT_SECRET: "dev-agent-secret-change-me"
+      SEED_DEFAULT_PASSWORD: "Password123!"
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  customer:
+    build:
+      context: .
+      dockerfile: web/customer-portal/Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:4000"
+    image: trustdesk-customer
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+  agent:
+    build:
+      context: .
+      dockerfile: web/agent-portal/Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:4000"
+    image: trustdesk-agent
+    ports:
+      - "8081:80"
+    depends_on:
+      - api

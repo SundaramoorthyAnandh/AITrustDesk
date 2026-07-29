@@ -83,6 +83,22 @@ npm run eval # runs data/eval_cases.jsonl and prints the 4-metric summary
 
 Starts the DB (migrate + seed), the API, and both portals with clean shutdown on Ctrl+C. `./stop.sh` frees the ports.
 
+### Run with Docker
+
+The whole stack runs in three containers (API + two nginx-served portals):
+
+```bash
+docker compose up --build
+```
+
+- Customer → http://localhost:8080
+- Agent → http://localhost:8081
+- API → http://localhost:4000
+
+The API container seeds on boot (`SEED_ON_BOOT=true`) and CORS is preconfigured for the portal ports.
+The portals are built with `VITE_API_URL=http://localhost:4000` (the browser reaches the API on its
+published port). Stop with `docker compose down`. See [DEPLOY.md](DEPLOY.md#run-with-docker) for details.
+
 ### Deploy (free)
 
 A one-click **Render Blueprint** ([`render.yaml`](render.yaml)) provisions the API + both portals on Render's free tier. See [DEPLOY.md](DEPLOY.md).
