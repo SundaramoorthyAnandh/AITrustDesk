@@ -16,7 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import { api, type TicketRow } from '../api';
-import { CategoryChip, PriorityChip, StatusChip, formatDate } from '../ui';
+import { CategoryChip, Mono, PriorityChip, StatusChip, formatDate } from '../ui';
 
 const STATUSES = ['', 'open', 'triaged', 'awaiting_agent', 'awaiting_customer', 'resolved', 'closed'];
 const CATEGORIES = ['', 'shipping', 'refund', 'warranty', 'billing', 'account_security', 'general'];
@@ -94,20 +94,26 @@ export function QueuePage() {
                   sx={{ cursor: 'pointer', ...(t.escalated ? { bgcolor: 'rgba(248,113,113,0.08)' } : {}) }}
                   onClick={() => navigate(`/tickets/${t.id}`)}
                 >
-                  <TableCell>
-                    <Typography variant="body2" fontWeight={600}>
+                  <TableCell sx={{ maxWidth: 320 }}>
+                    <Typography variant="body2" fontWeight={650} noWrap title={t.subject ?? ''}>
                       {t.subject ?? '(no subject)'}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {t.id}
+                    <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.75 }} title={t.id}>
+                      <Mono>{t.id.slice(0, 14)}…</Mono>
                     </Typography>
                   </TableCell>
-                  <TableCell>{t.customerName}</TableCell>
+                  <TableCell>
+                    <Typography variant="body2" noWrap>
+                      {t.customerName}
+                    </Typography>
+                  </TableCell>
                   <TableCell><CategoryChip category={t.category} /></TableCell>
                   <TableCell><PriorityChip priority={t.priority} /></TableCell>
                   <TableCell><StatusChip status={t.status} /></TableCell>
                   <TableCell>
-                    <Typography variant="caption">{formatDate(t.createdAt)}</Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {formatDate(t.createdAt)}
+                    </Typography>
                   </TableCell>
                 </TableRow>
               ))}

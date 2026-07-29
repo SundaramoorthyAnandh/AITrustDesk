@@ -1,4 +1,29 @@
 import Chip from '@mui/material/Chip';
+import Box from '@mui/material/Box';
+import type { ReactNode } from 'react';
+import { mono } from './theme';
+
+/** Monospaced inline text for IDs, SKUs, citations and trace data. */
+export function Mono({ children, sx }: { children: ReactNode; sx?: object }) {
+  return (
+    <Box component="span" sx={{ fontFamily: mono, fontSize: '0.86em', letterSpacing: '-0.01em', ...sx }}>
+      {children}
+    </Box>
+  );
+}
+
+/** Citation code chip (KB-*) rendered in mono. */
+export function CitationChip({ id }: { id: string }) {
+  return (
+    <Chip
+      label={id}
+      size="small"
+      variant="outlined"
+      color="primary"
+      sx={{ fontFamily: mono, fontSize: 11, fontWeight: 600 }}
+    />
+  );
+}
 
 const STATUS_COLOR: Record<string, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
   open: 'info',

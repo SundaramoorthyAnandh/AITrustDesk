@@ -37,15 +37,29 @@ export function LoginPage() {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', bgcolor: 'background.default', p: 2 }}>
-      <Card sx={{ width: 420, maxWidth: '100%' }} elevation={6}>
-        <CardContent sx={{ p: 4 }}>
-          <Stack alignItems="center" spacing={1} mb={3}>
-            <ShieldMoonIcon color="primary" sx={{ fontSize: 40 }} />
-            <Typography variant="h5">Agent Console</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Sign in with your support-agent credentials
-            </Typography>
+    <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2 }}>
+      <Card sx={{ width: 440, maxWidth: '100%', borderRadius: 4 }}>
+        <CardContent sx={{ p: { xs: 3, sm: 4.5 } }}>
+          <Stack alignItems="center" spacing={1.5} mb={3.5}>
+            <Box
+              sx={{
+                width: 56,
+                height: 56,
+                borderRadius: 3.5,
+                display: 'grid',
+                placeItems: 'center',
+                background: 'linear-gradient(135deg, #6366F1, #22D3EE)',
+                boxShadow: '0 10px 28px -8px rgba(99,102,241,.9)',
+              }}
+            >
+              <ShieldMoonIcon sx={{ fontSize: 30, color: '#0B1020' }} />
+            </Box>
+            <Box textAlign="center">
+              <Typography variant="h5">Agent Console</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                Sign in with your support-agent credentials
+              </Typography>
+            </Box>
           </Stack>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -67,11 +81,6 @@ export function LoginPage() {
               </Button>
             </Stack>
           </form>
-
-          <Alert severity="info" sx={{ mt: 3 }}>
-            Demo agents: <strong>agent@trustdesk.io</strong> · <strong>supervisor@trustdesk.io</strong> — password{' '}
-            <strong>Password123!</strong>
-          </Alert>
         </CardContent>
       </Card>
     </Box>

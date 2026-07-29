@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { api, pollJob, type EvalSummary } from '../api';
+import { CitationChip, Mono } from '../ui';
 
 const METRIC_LABELS: Record<string, string> = {
   triageAccuracy: 'Triage accuracy',
@@ -101,8 +102,8 @@ export function EvalPage() {
             ))}
           </Stack>
 
-          <Paper variant="outlined">
-            <Table size="small">
+          <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
+            <Table size="small" sx={{ minWidth: 900 }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Case</TableCell>
@@ -120,9 +121,9 @@ export function EvalPage() {
                   const failed = Object.values(c.checks).some((v) => v === false);
                   return (
                     <TableRow key={c.id} sx={failed ? { bgcolor: 'rgba(248,113,113,0.12)' } : undefined}>
-                      <TableCell>
-                        <Typography variant="body2" fontWeight={600}>
-                          {c.id}
+                      <TableCell sx={{ maxWidth: 260 }}>
+                        <Typography variant="body2" fontWeight={700}>
+                          <Mono>{c.id}</Mono>
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           {c.description}
@@ -133,7 +134,17 @@ export function EvalPage() {
                       <TableCell>{c.draftStatus}</TableCell>
                       <TableCell>{c.systemEscalated ? 'yes' : 'no'}</TableCell>
                       <TableCell>{c.guardrailKind}</TableCell>
-                      <TableCell>{c.citations.join(', ') || '—'}</TableCell>
+                      <TableCell>
+                        {c.citations.length ? (
+                          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                            {c.citations.map((id) => (
+                              <CitationChip key={id} id={id} />
+                            ))}
+                          </Stack>
+                        ) : (
+                          '—'
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
                           {Object.entries(c.checks)

@@ -1,4 +1,16 @@
 import Chip from '@mui/material/Chip';
+import Box from '@mui/material/Box';
+import type { ReactNode } from 'react';
+import { mono } from './theme';
+
+/** Monospaced inline text for IDs, SKUs and policy codes. */
+export function Mono({ children, sx }: { children: ReactNode; sx?: object }) {
+  return (
+    <Box component="span" sx={{ fontFamily: mono, fontSize: '0.86em', letterSpacing: '-0.01em', ...sx }}>
+      {children}
+    </Box>
+  );
+}
 
 const STATUS_COLOR: Record<string, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
   open: 'info',

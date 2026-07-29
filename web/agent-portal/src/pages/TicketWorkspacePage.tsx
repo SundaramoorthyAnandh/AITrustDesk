@@ -35,7 +35,7 @@ import {
   type ToolCatalogEntry,
   type Trace,
 } from '../api';
-import { CategoryChip, DraftStatusChip, PriorityChip, StatusChip, formatDate, money } from '../ui';
+import { CategoryChip, CitationChip, DraftStatusChip, Mono, PriorityChip, StatusChip, formatDate, money } from '../ui';
 import { ValidatedTextField, validators, firstError, type Validator } from '../components/ValidatedTextField';
 
 interface TriageJobResult {
@@ -128,7 +128,9 @@ export function TicketWorkspacePage() {
         <Link component={RouterLink} to="/" underline="hover">
           Queue
         </Link>
-        <Typography color="text.primary">{ticket.id}</Typography>
+        <Typography color="text.primary" title={ticket.id}>
+          <Mono>{ticket.id.slice(0, 14)}…</Mono>
+        </Typography>
       </Breadcrumbs>
 
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
@@ -163,8 +165,8 @@ export function TicketWorkspacePage() {
                   </Tooltip>
                 )}
               </Stack>
-              <Typography variant="body2" color="text.secondary">
-                {customer.email} · {customer.id}
+              <Typography variant="body2" color="text.secondary" title={customer.id}>
+                {customer.email} · <Mono>{customer.id.slice(0, 14)}…</Mono>
               </Typography>
 
               <Divider sx={{ my: 1.5 }} />
@@ -172,8 +174,9 @@ export function TicketWorkspacePage() {
                 Order context
               </Typography>
               {order ? (
-                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  {order.id} · {order.itemName} ({order.itemSku}) · {money(order.amountCents, order.currency)}
+                <Typography variant="body2" sx={{ mt: 0.5 }} title={order.id}>
+                  <Mono>{order.id.slice(0, 14)}…</Mono> · {order.itemName} (<Mono>{order.itemSku}</Mono>) ·{' '}
+                  {money(order.amountCents, order.currency)}
                   <br />
                   ordered {formatDate(order.orderDate)} · status {order.status}
                   {order.deliveredAt ? ` · delivered ${formatDate(order.deliveredAt)}` : ''}
@@ -271,7 +274,7 @@ function RetrievalCard({ hits, busy, onSearch }: { hits: SearchHit[] | null; bus
             {hits.map((h) => (
               <Box key={h.docId}>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Chip size="small" label={h.docId} variant="outlined" />
+                  <CitationChip id={h.docId} />
                   <Typography variant="caption" color="text.secondary">
                     score {h.score}
                   </Typography>
@@ -378,7 +381,7 @@ function DraftCard({
                   Citations:
                 </Typography>
                 {draft.citations.map((c) => (
-                  <Chip key={c} label={c} size="small" color="primary" variant="outlined" />
+                  <CitationChip key={c} id={c} />
                 ))}
               </Stack>
             )}
@@ -569,10 +572,10 @@ function ActionCard({
                     />
                   </Stack>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    {JSON.stringify(a.args)}
+                    <Mono>{JSON.stringify(a.args)}</Mono>
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    idempotency: {a.idempotencyKey.slice(0, 12)}…
+                    idempotency: <Mono>{a.idempotencyKey.slice(0, 12)}…</Mono>
                   </Typography>
                   {a.result && (
                     <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'success.main' }}>
@@ -617,7 +620,7 @@ function TracesCard({ traces }: { traces: Trace[] }) {
               </Typography>
               {t.retrievedDocIds.length > 0 && (
                 <Typography variant="caption" color="text.secondary">
-                  docs=[{t.retrievedDocIds.join(', ')}]
+                  docs=[<Mono>{t.retrievedDocIds.join(', ')}</Mono>]
                 </Typography>
               )}
               <Typography variant="caption" color="text.secondary">
