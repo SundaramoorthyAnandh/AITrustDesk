@@ -42,11 +42,14 @@ git push -u origin main
 4. Wait for the first build. The API's JWT secrets are auto-generated; `SEED_ON_BOOT` seeds on start.
 
 ## Step 3 — Use it
+Live demo (this deployment):
 - **Customer portal:** `https://trustdesk-customer.onrender.com`
 - **Agent console:** `https://trustdesk-agent.onrender.com`
-- **API health:** `https://trustdesk-api.onrender.com/health`
+- **API health:** `https://trustdesk-api-uk31.onrender.com/health`
 
-(Exact URLs appear on each service's page; if a name was taken globally Render adds a suffix.)
+> The API URL has a `-uk31` suffix because the name `trustdesk-api` was already taken globally on
+> Render. Exact URLs always appear on each service's page in the dashboard; the two static-site names
+> were free so they have no suffix.
 
 ### Demo logins — password `Password123!`
 - Customer: `alice.johnson@example.com` (or self-register)

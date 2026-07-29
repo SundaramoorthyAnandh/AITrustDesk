@@ -20,6 +20,22 @@ This repository contains three deployables:
 
 ---
 
+## 🌐 Live demo (hosted free on Render)
+
+| App | URL |
+| --- | --- |
+| **Customer Complaint Portal** | https://trustdesk-customer.onrender.com |
+| **Agent Console** | https://trustdesk-agent.onrender.com |
+| **API** | https://trustdesk-api-uk31.onrender.com/health |
+
+Demo logins — password `Password123!`: customer `alice.johnson@example.com`, agent `agent@trustdesk.io`.
+
+> The API is on Render's free tier: it sleeps after ~15 min idle, so the **first request may take
+> ~30–60s** to wake (open the API `/health` link once, then use the portals). The database is
+> ephemeral and reseeds on boot, so session-created data resets on restart — see [DEPLOY.md](DEPLOY.md).
+
+---
+
 ## Quick start
 
 Prerequisites: **Node ≥ 20.11**, npm ≥ 10. (LM Studio is optional — the default LLM provider is a
