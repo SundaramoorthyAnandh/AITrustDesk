@@ -193,6 +193,12 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   if (res.status === 401 && retry && (await refresh())) {
     return request<T>(path, init, false);
   }
+  if (res.status === 401) {
+    clearTokens();
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
+  }
   if (!res.ok) {
     let message = res.statusText;
     try {

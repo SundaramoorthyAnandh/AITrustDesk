@@ -95,6 +95,11 @@ docker compose up --build
 - Agent → http://localhost:8081
 - API → http://localhost:4000
 
+To force-rebuild fresh images without cache:
+```bash
+docker compose build --no-cache && docker compose up
+```
+
 The API container seeds on boot (`SEED_ON_BOOT=true`) and CORS is preconfigured for the portal ports.
 The portals are built with `VITE_API_URL=http://localhost:4000` (the browser reaches the API on its
 published port). Stop with `docker compose down`. See [DEPLOY.md](DEPLOY.md#run-with-docker) for details.
