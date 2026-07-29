@@ -159,6 +159,11 @@ export const api = {
     clearTokens();
   },
   me: () => request<{ profile: Profile }>('/auth/customer/me'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>('/auth/customer/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   orders: () => request<{ orders: Order[] }>('/me/orders'),
   products: () => request<{ products: Product[] }>('/me/products'),
   createOrder: (payload: { sku: string; quantity: number }) =>

@@ -239,6 +239,11 @@ export const api = {
     clearTokens();
   },
   me: () => request<{ profile: AgentProfile }>('/auth/agent/me'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>('/auth/agent/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
 
   tickets: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(params).toString();

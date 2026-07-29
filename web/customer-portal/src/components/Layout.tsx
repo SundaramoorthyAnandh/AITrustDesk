@@ -1,9 +1,9 @@
-import { AppBar, Avatar, Box, Button, Container, Stack, Toolbar, Typography } from '@mui/material';
+import { AppBar, Box, Button, Container, Stack, Toolbar, Typography } from '@mui/material';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
-import AddIcon from '@mui/icons-material/Add';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '../auth';
+import { AccountMenu } from './AccountMenu';
 
 const NAV = [
   { label: 'Complaints', to: '/' },
@@ -11,8 +11,7 @@ const NAV = [
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { profile, logout } = useAuth();
-  const navigate = useNavigate();
+  const { profile } = useAuth();
   const { pathname } = useLocation();
 
   const isActive = (to: string) => (to === '/' ? pathname === '/' || pathname.startsWith('/tickets') : pathname.startsWith(to));
@@ -72,39 +71,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
           <Box sx={{ flexGrow: 1 }} />
 
-          {profile && (
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Button variant="contained" size="small" startIcon={<AddIcon />} component={RouterLink} to="/tickets/new">
-                New complaint
-              </Button>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Avatar
-                  sx={{
-                    width: 34,
-                    height: 34,
-                    fontSize: 14,
-                    fontWeight: 700,
-                    background: 'linear-gradient(135deg, #7C5CFF, #0EA5A4)',
-                  }}
-                >
-                  {profile.name.charAt(0).toUpperCase()}
-                </Avatar>
-                <Typography variant="body2" sx={{ fontWeight: 600, display: { xs: 'none', md: 'block' } }}>
-                  {profile.name}
-                </Typography>
-              </Stack>
-              <Button
-                size="small"
-                sx={{ color: 'text.secondary' }}
-                onClick={async () => {
-                  await logout();
-                  navigate('/login');
-                }}
-              >
-                Sign out
-              </Button>
-            </Stack>
-          )}
+          {profile && <AccountMenu />}
         </Toolbar>
       </AppBar>
 

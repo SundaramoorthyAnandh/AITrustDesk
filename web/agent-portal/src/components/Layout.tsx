@@ -1,10 +1,11 @@
-import { AppBar, Avatar, Box, Button, Chip, Container, Stack, Toolbar, Typography } from '@mui/material';
+import { AppBar, Box, Button, Container, Stack, Toolbar, Typography } from '@mui/material';
 import ShieldMoonIcon from '@mui/icons-material/ShieldMoon';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import InboxIcon from '@mui/icons-material/Inbox';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '../auth';
+import { AccountMenu } from './AccountMenu';
 
 const NAV = [
   { label: 'Queue', to: '/', icon: <InboxIcon sx={{ fontSize: 18 }} /> },
@@ -12,8 +13,7 @@ const NAV = [
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { profile, logout } = useAuth();
-  const navigate = useNavigate();
+  const { profile } = useAuth();
   const { pathname } = useLocation();
 
   const isActive = (to: string) => (to === '/' ? pathname === '/' || pathname.startsWith('/tickets') : pathname.startsWith(to));
@@ -74,44 +74,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
           <Box sx={{ flexGrow: 1 }} />
 
-          {profile && (
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Avatar
-                  sx={{
-                    width: 34,
-                    height: 34,
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: '#0B1020',
-                    background: 'linear-gradient(135deg, #22D3EE, #6366F1)',
-                  }}
-                >
-                  {profile.name.charAt(0).toUpperCase()}
-                </Avatar>
-                <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                  <Typography variant="body2" sx={{ fontWeight: 650, lineHeight: 1.15 }}>
-                    {profile.name}
-                  </Typography>
-                  <Chip
-                    label={profile.role}
-                    size="small"
-                    sx={{ height: 17, fontSize: 10, bgcolor: 'rgba(255,255,255,0.08)', fontWeight: 700 }}
-                  />
-                </Box>
-              </Stack>
-              <Button
-                size="small"
-                sx={{ color: 'text.secondary' }}
-                onClick={async () => {
-                  await logout();
-                  navigate('/login');
-                }}
-              >
-                Sign out
-              </Button>
-            </Stack>
-          )}
+          {profile && <AccountMenu />}
         </Toolbar>
       </AppBar>
 
