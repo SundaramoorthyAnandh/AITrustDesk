@@ -63,4 +63,17 @@ describe('agent draft editing', () => {
     const res = await app.inject({ method: 'PATCH', url: `/agent/drafts/${draft.id}`, payload: { text: 'nope' } });
     expect(res.statusCode).toBe(401);
   });
+
+  it('allows sending an escalated draft to the customer', async () => {
+    const { draft } = await runDraft(seedId('TCK-9008')); // escalated ticket
+    expect(draft.status).toBe('escalated');
+
+    const sendRes = await app.inject({
+      method: 'POST',
+      url: `/agent/drafts/${draft.id}/send`,
+      headers: auth(),
+    });
+    expect(sendRes.statusCode).toBe(200);
+    expect(sendRes.json().status).toBe('sent');
+  });
 });

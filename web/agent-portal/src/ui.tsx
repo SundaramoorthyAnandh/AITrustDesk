@@ -67,6 +67,6 @@ export function DraftStatusChip({ status }: { status: string }) {
 export function formatDate(iso: string): string {
   return new Date(iso).toLocaleString();
 }
-export function money(cents: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(cents / 100);
+export function money(cents: number, _currency = 'INR'): string {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(cents / 100);
 }

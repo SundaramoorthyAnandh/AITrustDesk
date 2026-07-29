@@ -172,4 +172,11 @@ export const api = {
   ticket: (id: string) => request<{ ticket: Ticket; order: Order | null; replies: Reply[] }>(`/me/tickets/${id}`),
   createTicket: (payload: { subject: string; body: string; orderId?: string | null }) =>
     request<{ ticket: Ticket }>('/me/tickets', { method: 'POST', body: JSON.stringify(payload) }),
+  replyToTicket: (id: string, text: string) =>
+    request<{ reply: Reply }>(`/me/tickets/${id}/reply`, { method: 'POST', body: JSON.stringify({ text }) }),
+  patchTicket: (id: string, body: { status: string }) =>
+    request<{ ticket: Ticket; order: Order | null; replies: Reply[] }>(`/me/tickets/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
 };

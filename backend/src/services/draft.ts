@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
 import { documents, drafts, tickets, type Draft } from '../db/schema.js';
 import { getProvider, getRetriever } from '../container.js';
@@ -69,6 +69,7 @@ export interface DraftPipelineInput {
   order?: OrderContext | null;
   ticketCreatedAt: string;
   categoryHint?: Category | null;
+  alreadySentCitations?: string[];
 }
 
 export interface DraftPipelineResult {
@@ -212,6 +213,7 @@ export async function runDraftPipeline(
       retrievedDocs: supporting,
       category,
       window,
+      alreadySentCitations: input.alreadySentCitations,
     });
     const parsed = DraftLLMResultSchema.parse(raw);
     text = parsed.text;
@@ -235,12 +237,12 @@ export async function runDraftPipeline(
   const supportingIds = new Set(supporting.map((d) => d.docId));
   const grounded = claimedCitations.filter((id) => supportingIds.has(id));
 
-  if (!sufficient || grounded.length === 0) {
+  if (grounded.length === 0) {
     return {
       status: 'escalated',
       text:
         'The retrieved policy doesn’t fully cover this request, so I’ve escalated it to a human agent rather than provide an unsupported answer.',
-      citations: grounded,
+      citations: [],
       category,
       guardrail,
       retrievedDocIds,
@@ -249,8 +251,10 @@ export async function runDraftPipeline(
     };
   }
 
+  const finalStatus: DraftStatus = !sufficient ? 'escalated' : 'draft';
+
   return {
-    status: 'draft',
+    status: finalStatus,
     text,
     citations: grounded,
     category,
@@ -275,11 +279,43 @@ export async function runDraft(
   if (!ctx) throw new Error(`Ticket not found: ${ticketId}`);
   const started = Date.now();
   const provider = opts.provider ?? getProvider();
+  const db = getDb();
+
+  // Fetch conversation history (sent agent replies and customer replies)
+  const historyDrafts = db
+    .select()
+    .from(drafts)
+    .where(and(eq(drafts.ticketId, ticketId), inArray(drafts.status, ['sent', 'customer_reply'])))
+    .orderBy(asc(drafts.createdAt))
+    .all();
+
+  // Collect citations already sent in previous agent replies
+  const sentDrafts = historyDrafts.filter((d) => d.status === 'sent');
+  const alreadySentSet = new Set<string>();
+  for (const d of sentDrafts) {
+    if (Array.isArray(d.citations)) {
+      d.citations.forEach((c) => alreadySentSet.add(c));
+    }
+    const matches = d.text.match(/KB-[A-Z0-9-]+/gi);
+    if (matches) {
+      matches.forEach((m) => alreadySentSet.add(m.toUpperCase()));
+    }
+  }
+  const alreadySentCitations = Array.from(alreadySentSet);
+
+  let fullBody = ctx.ticket.body;
+  if (historyDrafts.length > 0) {
+    const convoLines = historyDrafts.map((d) => {
+      const sender = d.status === 'customer_reply' ? 'Customer' : 'Support Agent';
+      return `[${sender}]: ${d.text}`;
+    });
+    fullBody = `${ctx.ticket.body}\n\n--- Conversation History ---\n${convoLines.join('\n\n')}`;
+  }
 
   const result = await runDraftPipeline(
     {
       subject: ctx.ticket.subject,
-      body: ctx.ticket.body,
+      body: fullBody,
       customer: {
         id: ctx.customer.id,
         name: ctx.customer.name,
@@ -299,12 +335,19 @@ export async function runDraft(
         : null,
       ticketCreatedAt: ctx.ticket.createdAt,
       categoryHint: (ctx.ticket.category as Category | null) ?? null,
+      alreadySentCitations,
     },
     { provider, retriever: opts.retriever },
   );
 
-  const db = getDb();
   const now = new Date().toISOString();
+
+  // Supersede any previous unsent 'draft' for this ticket so the new draft is active
+  db.update(drafts)
+    .set({ status: 'refused' })
+    .where(and(eq(drafts.ticketId, ticketId), eq(drafts.status, 'draft')))
+    .run();
+
   const draftRow: Draft = {
     id: newId(),
     ticketId,

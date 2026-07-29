@@ -131,7 +131,7 @@ export function loadAll(nowIso = new Date().toISOString()): { counts: Record<str
         itemName: o.item_name ?? null,
         quantity: o.quantity ?? 1,
         amountCents: o.amount_cents ?? 0,
-        currency: o.currency ?? 'USD',
+        currency: 'INR',
         deliveredAt: o.delivered_at ?? null,
       })
       .onConflictDoUpdate({
@@ -227,7 +227,7 @@ export function loadAll(nowIso = new Date().toISOString()): { counts: Record<str
         description: p.description ?? null,
         category: p.category ?? null,
         priceCents: p.price_cents ?? 0,
-        currency: p.currency ?? 'USD',
+        currency: 'INR',
         active: p.active ?? true,
       })
       .onConflictDoUpdate({

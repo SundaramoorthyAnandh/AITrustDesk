@@ -43,7 +43,9 @@ export function DashboardPage() {
 
       {tickets && tickets.length === 0 && (
         <Card variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">You have no complaints yet. Create one to get started.</Typography>
+          <Typography color="text.secondary">
+            We are happy to see no issues on us. If any, please file a complaint. We are here to assist you 24x7
+          </Typography>
         </Card>
       )}
 

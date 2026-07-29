@@ -6,13 +6,15 @@ import {
   Button,
   Card,
   CardContent,
+  IconButton,
+  InputAdornment,
   MenuItem,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
+import ClearIcon from '@mui/icons-material/Clear';
 import { api, type Order } from '../api';
-import { money } from '../ui';
 import { ValidatedTextField, validators, firstError, type Validator } from '../components/ValidatedTextField';
 
 const subjectRules: Validator[] = [validators.required('Subject is required'), validators.maxLen(200)];
@@ -74,13 +76,33 @@ export function NewComplaintPage() {
                 onChange={(e) => setOrderId(e.target.value)}
                 fullWidth
                 helperText="Link an order so our team has full context"
+                InputProps={{
+                  endAdornment: orderId ? (
+                    <InputAdornment position="end" sx={{ mr: 2 }}>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOrderId('');
+                        }}
+                        aria-label="Clear order selection"
+                      >
+                        <ClearIcon fontSize="small" />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : null,
+                }}
               >
-                <MenuItem value="">
-                  <em>No specific order</em>
-                </MenuItem>
                 {orders.map((o) => (
                   <MenuItem key={o.id} value={o.id}>
-                    {o.id} · {o.itemName} · {money(o.amountCents, o.currency)} · {o.status}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', py: 0.5 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {o.itemName}{o.itemSku ? ` · ${o.itemSku}` : ''}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {o.id}
+                      </Typography>
+                    </Box>
                   </MenuItem>
                 ))}
               </TextField>

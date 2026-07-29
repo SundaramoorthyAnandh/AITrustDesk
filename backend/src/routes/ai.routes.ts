@@ -8,6 +8,7 @@ import { getRetriever } from '../container.js';
 import { runTriage } from '../services/triage.js';
 import { runDraft } from '../services/draft.js';
 import { writeTrace } from '../services/traces.js';
+import { sendTicketReplyEmail } from '../services/email.service.js';
 import { jobQueue } from '../jobs/queue.js';
 
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
@@ -64,8 +65,8 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
 
     const draft = db.select().from(drafts).where(eq(drafts.id, draftId)).get();
     if (!draft) return reply.code(404).send({ error: 'not_found' });
-    if (draft.status !== 'draft') {
-      return reply.code(409).send({ error: 'conflict', message: `Only unsent drafts can be edited (status=${draft.status})` });
+    if (draft.status === 'sent') {
+      return reply.code(409).send({ error: 'conflict', message: 'Sent replies cannot be edited.' });
     }
 
     const now = new Date().toISOString();
@@ -96,13 +97,17 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     const { draftId } = req.params as { draftId: string };
     const draft = db.select().from(drafts).where(eq(drafts.id, draftId)).get();
     if (!draft) return reply.code(404).send({ error: 'not_found' });
-    if (draft.status !== 'draft') {
-      return reply.code(409).send({ error: 'conflict', message: `Only grounded drafts can be sent (status=${draft.status})` });
+    if (draft.status === 'sent') {
+      return reply.code(409).send({ error: 'conflict', message: 'Reply has already been sent.' });
     }
     const now = new Date().toISOString();
     db.update(drafts).set({ status: 'sent' }).where(eq(drafts.id, draftId)).run();
     db.update(tickets).set({ status: 'awaiting_customer', updatedAt: now }).where(eq(tickets.id, draft.ticketId)).run();
-    return reply.send({ ...draft, status: 'sent' });
+
+    // Send conversation update email to the customer
+    const email = await sendTicketReplyEmail(draft.ticketId, draft.text);
+
+    return reply.send({ ...draft, status: 'sent', emailSent: Boolean(email) });
   });
 
   // GET /agent/tickets/:id/latest-draft → convenience for the workspace

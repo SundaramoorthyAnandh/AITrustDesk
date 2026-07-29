@@ -39,16 +39,22 @@ export function buildTriagePrompt(input: TriageInput): { system: string; user: s
 }
 
 export function buildDraftPrompt(input: DraftInput): { system: string; user: string } {
+  const alreadySentSet = new Set(input.alreadySentCitations ?? []);
   const docs = input.retrievedDocs
-    .map((d) => `[${d.docId}] ${d.title}\n${d.body}`)
+    .map((d) => `[${d.docId}] ${d.title}\n${d.body}${alreadySentSet.has(d.docId) ? ' (ALREADY SENT TO CUSTOMER IN PREVIOUS TURN)' : ''}`)
     .join('\n\n');
 
   const windowNote = input.window
     ? `Time-rule verdict (computed, authoritative): windowDays=${input.window.windowDays}, elapsedDays=${input.window.elapsedDays}, within=${input.window.within}. Do NOT recompute dates yourself.`
     : 'No time window applies.';
 
+  const instructionExtra =
+    alreadySentSet.size > 0
+      ? '\nNote: Some KB policies were ALREADY sent to the customer in previous turns. Do NOT repeat or re-quote KB policy text or bullet points that were already sent unless new policy details are needed.'
+      : '';
+
   const user = [
-    'Draft a support reply grounded ONLY in the retrieved policy below. Cite the exact doc ids you rely on.',
+    `Draft a support reply grounded ONLY in the retrieved policy below. Cite the exact doc ids you rely on.${instructionExtra}`,
     block('CUSTOMER_MESSAGE', `${input.subject ?? ''}\n${input.body}`),
     block(
       'CUSTOMER_ORDER',

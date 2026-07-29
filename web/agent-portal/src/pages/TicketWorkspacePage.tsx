@@ -9,10 +9,13 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Collapse,
   Divider,
+  IconButton,
   Link,
   MenuItem,
   Stack,
+  TablePagination,
   TextField,
   Tooltip,
   Typography,
@@ -23,6 +26,8 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import SearchIcon from '@mui/icons-material/Search';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import SendIcon from '@mui/icons-material/Send';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import {
   api,
   pollJob,
@@ -111,6 +116,12 @@ export function TicketWorkspacePage() {
       await refresh();
     });
 
+  const doPatchStatus = (status: string) =>
+    run('patch', async () => {
+      await api.patchTicket(id!, { status });
+      await refresh();
+    });
+
   if (error && !ctx) return <Alert severity="error">{error}</Alert>;
   if (!ctx)
     return (
@@ -120,7 +131,7 @@ export function TicketWorkspacePage() {
     );
 
   const { ticket, customer, order } = ctx;
-  const latestDraft = drafts[0] ?? null;
+  const latestDraft = drafts.length > 0 ? drafts[drafts.length - 1] : null;
 
   return (
     <Stack spacing={2}>
@@ -137,11 +148,25 @@ export function TicketWorkspacePage() {
 
       <Stack direction="row" justifyContent="space-between" alignItems="center">
         <Typography variant="h5">{ticket.subject ?? '(no subject)'}</Typography>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} alignItems="center">
           <CategoryChip category={ticket.category} />
           <PriorityChip priority={ticket.priority} />
           <StatusChip status={ticket.status} />
           {ticket.escalated && <Chip size="small" color="warning" icon={<GppMaybeIcon />} label="escalated" />}
+          {ticket.status === 'closed' ? (
+            <Button size="small" variant="outlined" color="primary" onClick={() => doPatchStatus('open')} disabled={busy === 'patch'}>
+              Reopen ticket
+            </Button>
+          ) : (
+            <Stack direction="row" spacing={1}>
+              <Button size="small" variant="outlined" color="success" onClick={() => doPatchStatus('resolved')} disabled={busy === 'patch'}>
+                Resolve
+              </Button>
+              <Button size="small" variant="outlined" color="error" onClick={() => doPatchStatus('closed')} disabled={busy === 'patch'}>
+                Close ticket
+              </Button>
+            </Stack>
+          )}
         </Stack>
       </Stack>
 
@@ -192,9 +217,52 @@ export function TicketWorkspacePage() {
           <Card variant="outlined">
             <CardContent>
               <Typography variant="overline" color="text.secondary">
-                Customer message
+                Conversation History
               </Typography>
-              <Typography sx={{ whiteSpace: 'pre-wrap', mt: 1 }}>{ticket.body}</Typography>
+              <Stack spacing={1.5} sx={{ mt: 1 }}>
+                <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'background.default', border: '1px solid', borderColor: 'divider' }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
+                    <Typography variant="caption" fontWeight={700} color="primary">
+                      Customer (Initial message)
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDate(ticket.createdAt)}
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{ticket.body}</Typography>
+                </Box>
+
+                {[...drafts]
+                  .filter((d) => d.status === 'sent' || d.status === 'customer_reply')
+                  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                  .map((d) => {
+                    const isCustomer = d.status === 'customer_reply';
+                    return (
+                      <Box
+                        key={d.id}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: 1.5,
+                          bgcolor: isCustomer ? 'background.default' : 'action.hover',
+                          border: '1px solid',
+                          borderColor: isCustomer ? 'divider' : 'primary.light',
+                          ml: isCustomer ? 0 : 2,
+                          mr: isCustomer ? 2 : 0,
+                        }}
+                      >
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
+                          <Typography variant="caption" fontWeight={700} color={isCustomer ? 'primary' : 'secondary'}>
+                            {isCustomer ? 'Customer (Reply)' : 'Support Agent (Sent reply)'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDate(d.createdAt)}
+                          </Typography>
+                        </Stack>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{d.text}</Typography>
+                      </Box>
+                    );
+                  })}
+              </Stack>
             </CardContent>
           </Card>
 
@@ -348,13 +416,13 @@ function DraftCard({
               {draft.editedAt && <Chip size="small" variant="outlined" label="edited by agent" />}
             </Stack>
             {draft.status === 'refused' && (
-              <Alert severity="error" sx={{ mb: 1 }}>
-                Guardrail refused this request — nothing was sent.
+              <Alert severity="error" sx={{ mb: 1.5 }}>
+                Guardrail blocked / refused — reason: {draft.text}
               </Alert>
             )}
             {draft.status === 'escalated' && (
-              <Alert severity="warning" sx={{ mb: 1 }}>
-                Escalated to a human — no grounded policy fully supported an answer.
+              <Alert severity="warning" sx={{ mb: 1.5 }}>
+                Guardrail blocked or escalated to human review — reason: {draft.text}
               </Alert>
             )}
 
@@ -386,7 +454,7 @@ function DraftCard({
               </Stack>
             )}
 
-            {draft.status === 'draft' && (
+            {draft.status !== 'sent' && (
               <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
                 {isEditing ? (
                   <>
@@ -405,7 +473,7 @@ function DraftCard({
                     <Button
                       size="small"
                       variant="contained"
-                      color="success"
+                      color="primary"
                       startIcon={<SendIcon />}
                       disabled={sending}
                       onClick={() => onSend(draft.id)}
@@ -603,32 +671,87 @@ function ActionCard({
 }
 
 function TracesCard({ traces }: { traces: Trace[] }) {
+  const [expanded, setExpanded] = useState(true);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+
   if (traces.length === 0) return null;
+
+  const handleChangePage = (_: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const paginatedTraces = traces.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
   return (
     <Card variant="outlined">
-      <CardContent>
-        <Typography variant="subtitle1" fontWeight={700}>
-          Audit trace ({traces.length})
-        </Typography>
-        <Stack spacing={0.5} sx={{ mt: 1 }}>
-          {traces.map((t) => (
-            <Stack key={t.id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Chip size="small" label={t.runType} variant="outlined" />
-              <Typography variant="caption">status={t.finalStatus}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                guardrail={t.guardrailResult ?? '—'}
-              </Typography>
-              {t.retrievedDocIds.length > 0 && (
-                <Typography variant="caption" color="text.secondary">
-                  docs=[<Mono>{t.retrievedDocIds.join(', ')}</Mono>]
-                </Typography>
-              )}
-              <Typography variant="caption" color="text.secondary">
-                {t.provider ?? ''} {t.latencyMs != null ? `${t.latencyMs}ms` : ''} · {formatDate(t.createdAt)}
-              </Typography>
-            </Stack>
-          ))}
+      <CardContent sx={{ pb: expanded ? 2 : '16px !important' }}>
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          alignItems="center"
+          sx={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <Typography variant="subtitle1" fontWeight={700}>
+            Audit trace ({traces.length})
+          </Typography>
+          <IconButton size="small" aria-label="toggle audit trace section">
+            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
         </Stack>
+
+        <Collapse in={expanded} timeout="auto" unmountOnExit>
+          <Divider sx={{ my: 1.5 }} />
+          <Stack spacing={1}>
+            {paginatedTraces.map((t) => (
+              <Box
+                key={t.id}
+                sx={{
+                  p: 1.25,
+                  borderRadius: 1,
+                  bgcolor: 'background.default',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Chip size="small" label={t.runType} variant="outlined" color="primary" />
+                  <Typography variant="caption" fontWeight={600}>
+                    status={t.finalStatus}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    guardrail={t.guardrailResult ?? '—'}
+                  </Typography>
+                  {t.retrievedDocIds.length > 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                      docs=[<Mono>{t.retrievedDocIds.join(', ')}</Mono>]
+                    </Typography>
+                  )}
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                    {t.provider ?? ''} {t.latencyMs != null ? `${t.latencyMs}ms` : ''} · {formatDate(t.createdAt)}
+                  </Typography>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+
+          <TablePagination
+            component="div"
+            count={traces.length}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[5, 10, 25]}
+            sx={{ borderTop: 'none', mt: 1, px: 0 }}
+          />
+        </Collapse>
       </CardContent>
     </Card>
   );

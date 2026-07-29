@@ -40,7 +40,7 @@ export function OrdersPage() {
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <Typography variant="h5">My orders</Typography>
         <Button variant="contained" startIcon={<AddShoppingCartIcon />} component={RouterLink} to="/orders/new">
-          Place new order
+          Add Order
         </Button>
       </Stack>
 

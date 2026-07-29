@@ -151,7 +151,7 @@ function ResetPasswordDialog({ open, onClose }: { open: boolean; onClose: () => 
       }}
       maxWidth="xs"
       fullWidth
-      slotProps={{ paper: { sx: { borderRadius: 4 } } }}
+      slotProps={{ paper: { sx: { borderRadius: 2.5 } } }}
     >
       <DialogTitle sx={{ fontWeight: 800 }}>Reset password</DialogTitle>
       <form onSubmit={submit} noValidate>

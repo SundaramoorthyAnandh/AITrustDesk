@@ -46,6 +46,8 @@ export interface DraftInput {
   category?: string | null;
   /** Pre-computed window verdict from the pure time helper (never Date.now()). */
   window?: { windowDays: number; elapsedDays: number; within: boolean } | null;
+  /** Doc IDs of KB citations already sent to the customer in previous turns. */
+  alreadySentCitations?: string[];
 }
 
 export interface GuardrailInput {
