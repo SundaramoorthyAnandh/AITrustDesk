@@ -13,6 +13,10 @@ import {
 } from '@mui/material';
 import { api, type Order } from '../api';
 import { money } from '../ui';
+import { ValidatedTextField, validators, firstError, type Validator } from '../components/ValidatedTextField';
+
+const subjectRules: Validator[] = [validators.required('Subject is required'), validators.maxLen(200)];
+const bodyRules: Validator[] = [validators.required('Please describe the issue'), validators.maxLen(5000)];
 
 export function NewComplaintPage() {
   const navigate = useNavigate();
@@ -27,8 +31,11 @@ export function NewComplaintPage() {
     api.orders().then((r) => setOrders(r.orders)).catch(() => undefined);
   }, []);
 
+  const formValid = !firstError(subject, subjectRules) && !firstError(body, bodyRules);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formValid) return;
     setBusy(true);
     setError(null);
     try {
@@ -51,10 +58,11 @@ export function NewComplaintPage() {
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           <form onSubmit={submit}>
             <Stack spacing={2.5}>
-              <TextField
+              <ValidatedTextField
                 label="Subject"
                 value={subject}
-                onChange={(e) => setSubject(e.target.value)}
+                onChange={setSubject}
+                rules={subjectRules}
                 required
                 fullWidth
                 placeholder="e.g. Headphones stopped working"
@@ -76,10 +84,11 @@ export function NewComplaintPage() {
                   </MenuItem>
                 ))}
               </TextField>
-              <TextField
+              <ValidatedTextField
                 label="Describe the issue"
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
+                onChange={setBody}
+                rules={bodyRules}
                 required
                 fullWidth
                 multiline
@@ -87,7 +96,7 @@ export function NewComplaintPage() {
               />
               <Stack direction="row" spacing={2} justifyContent="flex-end">
                 <Button onClick={() => navigate('/')}>Cancel</Button>
-                <Button type="submit" variant="contained" disabled={busy}>
+                <Button type="submit" variant="contained" disabled={busy || !formValid}>
                   Submit complaint
                 </Button>
               </Stack>

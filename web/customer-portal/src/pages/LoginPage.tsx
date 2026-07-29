@@ -9,12 +9,15 @@ import {
   Stack,
   Tab,
   Tabs,
-  TextField,
   Typography,
 } from '@mui/material';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import { useAuth } from '../auth';
 import { ApiError } from '../api';
+import { ValidatedTextField, validators, firstError, type Validator } from '../components/ValidatedTextField';
+
+const nameRules: Validator[] = [validators.required('Name is required'), validators.maxLen(120)];
+const emailRules: Validator[] = [validators.required('Email is required'), validators.email()];
 
 export function LoginPage() {
   const { profile, login, register } = useAuth();
@@ -28,13 +31,25 @@ export function LoginPage() {
 
   if (profile) return <Navigate to="/" replace />;
 
+  const isRegister = tab === 1;
+  // Registration enforces a strong password; login only needs a non-empty one.
+  const passwordRules: Validator[] = isRegister
+    ? [validators.required('Password is required'), validators.minLen(8)]
+    : [validators.required('Password is required')];
+
+  const formValid =
+    !firstError(email, emailRules) &&
+    !firstError(password, passwordRules) &&
+    (!isRegister || !firstError(name, nameRules));
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formValid) return;
     setBusy(true);
     setError(null);
     try {
-      if (tab === 0) await login(email, password);
-      else await register(name, email, password);
+      if (isRegister) await register(name, email, password);
+      else await login(email, password);
       navigate('/');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong');
@@ -55,34 +70,44 @@ export function LoginPage() {
             </Typography>
           </Stack>
 
-          <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" sx={{ mb: 2 }}>
+          <Tabs
+            value={tab}
+            onChange={(_, v) => {
+              setTab(v);
+              setError(null);
+            }}
+            variant="fullWidth"
+            sx={{ mb: 2 }}
+          >
             <Tab label="Sign in" />
             <Tab label="Create account" />
           </Tabs>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-          <form onSubmit={submit}>
+          <form onSubmit={submit} noValidate>
             <Stack spacing={2}>
-              {tab === 1 && (
-                <TextField label="Full name" value={name} onChange={(e) => setName(e.target.value)} required fullWidth />
+              {isRegister && (
+                <ValidatedTextField label="Full name" value={name} onChange={setName} rules={nameRules} required fullWidth />
               )}
-              <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth />
-              <TextField
+              <ValidatedTextField label="Email" type="email" value={email} onChange={setEmail} rules={emailRules} required fullWidth />
+              <ValidatedTextField
                 label="Password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
+                rules={passwordRules}
                 required
                 fullWidth
+                helperText={isRegister ? 'At least 8 characters' : undefined}
               />
-              <Button type="submit" variant="contained" size="large" disabled={busy}>
-                {tab === 0 ? 'Sign in' : 'Create account'}
+              <Button type="submit" variant="contained" size="large" disabled={busy || !formValid}>
+                {isRegister ? 'Create account' : 'Sign in'}
               </Button>
             </Stack>
           </form>
 
-          {tab === 0 && (
+          {!isRegister && (
             <Alert severity="info" sx={{ mt: 3 }}>
               Demo login: <strong>alice.johnson@example.com</strong> / <strong>Password123!</strong>
             </Alert>

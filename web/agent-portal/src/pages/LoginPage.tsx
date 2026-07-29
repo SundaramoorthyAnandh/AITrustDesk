@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Card, CardContent, Stack, Typography } from '@mui/material';
 import ShieldMoonIcon from '@mui/icons-material/ShieldMoon';
 import { useAuth } from '../auth';
 import { ApiError } from '../api';
+import { ValidatedTextField, validators, firstError, type Validator } from '../components/ValidatedTextField';
+
+const emailRules: Validator[] = [validators.required('Email is required'), validators.email()];
+const passwordRules: Validator[] = [validators.required('Password is required')];
 
 export function LoginPage() {
   const { profile, login } = useAuth();
@@ -15,8 +19,11 @@ export function LoginPage() {
 
   if (profile) return <Navigate to="/" replace />;
 
+  const formValid = !firstError(email, emailRules) && !firstError(password, passwordRules);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formValid) return;
     setBusy(true);
     setError(null);
     try {
@@ -43,18 +50,19 @@ export function LoginPage() {
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
-          <form onSubmit={submit}>
+          <form onSubmit={submit} noValidate>
             <Stack spacing={2}>
-              <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required fullWidth />
-              <TextField
+              <ValidatedTextField label="Email" type="email" value={email} onChange={setEmail} rules={emailRules} required fullWidth />
+              <ValidatedTextField
                 label="Password"
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
+                rules={passwordRules}
                 required
                 fullWidth
               />
-              <Button type="submit" variant="contained" size="large" disabled={busy}>
+              <Button type="submit" variant="contained" size="large" disabled={busy || !formValid}>
                 Sign in
               </Button>
             </Stack>

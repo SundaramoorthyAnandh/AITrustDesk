@@ -197,7 +197,9 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
     let message = res.statusText;
     try {
       const body = await res.json();
-      message = body.message ?? body.error ?? message;
+      const fieldErrors = body?.details?.fieldErrors as Record<string, string[]> | undefined;
+      const firstFieldError = fieldErrors ? Object.values(fieldErrors).flat()[0] : undefined;
+      message = body.message ?? firstFieldError ?? body.error ?? message;
     } catch {
       /* ignore */
     }

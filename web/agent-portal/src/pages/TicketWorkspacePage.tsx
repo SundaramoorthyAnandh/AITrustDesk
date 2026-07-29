@@ -36,6 +36,7 @@ import {
   type Trace,
 } from '../api';
 import { CategoryChip, DraftStatusChip, PriorityChip, StatusChip, formatDate, money } from '../ui';
+import { ValidatedTextField, validators, firstError, type Validator } from '../components/ValidatedTextField';
 
 interface TriageJobResult {
   triage: { category: string; priority: string; escalate: boolean; reason: string };
@@ -429,6 +430,12 @@ const TOOL_FIELDS: Record<string, string[]> = {
   create_replacement_order: ['order_id', 'sku', 'reason'],
 };
 
+// Validation for the editable action fields (order_id/sku are read-only from the ticket).
+const FIELD_RULES: Record<string, Validator[]> = {
+  amount_cents: [validators.integerMin(0, 'Enter a whole number ≥ 0')],
+  reason: [validators.required('A reason is required')],
+};
+
 function ActionCard({
   ticket,
   order,
@@ -462,6 +469,9 @@ function ActionCard({
   // order_id (and the replacement sku) come from the ticket's linked order, so
   // they're pre-filled and read-only — the agent never hand-types an identifier.
   const orderMissing = !ticket.orderId;
+
+  const isReadOnly = (f: string) => f === 'order_id' || (f === 'sku' && Boolean(order?.itemSku));
+  const argsValid = fields.every((f) => isReadOnly(f) || !firstError(args[f] ?? '', FIELD_RULES[f] ?? []));
 
   const recommend = async () => {
     setError(null);
@@ -510,27 +520,29 @@ function ActionCard({
             </Alert>
           )}
 
-          {fields.map((f) => {
-            const readOnly = f === 'order_id' || (f === 'sku' && Boolean(order?.itemSku));
-            return (
+          {fields.map((f) =>
+            isReadOnly(f) ? (
               <TextField
                 key={f}
                 label={f}
                 size="small"
                 value={args[f] ?? ''}
-                onChange={readOnly ? undefined : (e) => setArgs((prev) => ({ ...prev, [f]: e.target.value }))}
-                InputProps={{ readOnly }}
-                helperText={
-                  readOnly
-                    ? "From the ticket’s order (read-only)"
-                    : f === 'amount_cents'
-                      ? 'Editable — e.g. for a partial refund'
-                      : undefined
-                }
+                InputProps={{ readOnly: true }}
+                helperText="From the ticket’s order (read-only)"
               />
-            );
-          })}
-          <Button variant="outlined" onClick={recommend} disabled={busy != null || orderMissing}>
+            ) : (
+              <ValidatedTextField
+                key={f}
+                label={f}
+                size="small"
+                value={args[f] ?? ''}
+                onChange={(v) => setArgs((prev) => ({ ...prev, [f]: v }))}
+                rules={FIELD_RULES[f] ?? []}
+                helperText={f === 'amount_cents' ? 'Editable — e.g. for a partial refund' : undefined}
+              />
+            ),
+          )}
+          <Button variant="outlined" onClick={recommend} disabled={busy != null || orderMissing || !argsValid}>
             Recommend action
           </Button>
         </Stack>
