@@ -62,7 +62,7 @@ export class MockProvider implements LLMProvider {
       parts.push(`• ${d.title}: ${firstSentence}.`);
     }
     parts.push('');
-    parts.push('If this looks right, an agent can proceed with the appropriate next step.');
+    parts.push(customerClosing(input.category, input.window ?? null));
 
     return {
       text: parts.join('\n'),
@@ -78,5 +78,27 @@ export class MockProvider implements LLMProvider {
       kind: finding.kind,
       reason: finding.safe ? 'No adversarial pattern detected.' : guardrailResultString(finding),
     };
+  }
+}
+
+/** A warm, customer-facing closing tailored to the request — never agent-facing meta. */
+function customerClosing(
+  category: string | null | undefined,
+  window: { within: boolean } | null,
+): string {
+  const outsideWindow = window ? !window.within : false;
+  switch (category) {
+    case 'refund':
+      return outsideWindow
+        ? 'While this falls outside the standard refund window, I’d be glad to look into store credit or other options — just let me know how you’d like to proceed.'
+        : 'If you’d like to go ahead, I can start a refund review on this order for you. Just reply to confirm and I’ll take care of it.';
+    case 'warranty':
+      return 'If you’d like, I can arrange a replacement or repair under warranty. Let me know and I’ll get it started for you.';
+    case 'shipping':
+      return 'Please allow the timeframe noted above; if it still hasn’t arrived, reply here and I’ll open a claim right away.';
+    case 'billing':
+      return 'I’ll review the charge and make sure everything is correct — please let me know if anything still looks off.';
+    default:
+      return 'Please let me know if there’s anything else I can help with — I’m happy to assist.';
   }
 }

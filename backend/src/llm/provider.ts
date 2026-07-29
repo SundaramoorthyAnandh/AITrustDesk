@@ -42,6 +42,8 @@ export interface DraftInput {
   customer?: CustomerContext | null;
   order?: OrderContext | null;
   retrievedDocs: RetrievedDoc[];
+  /** Triaged category (used to tailor a customer-facing closing). */
+  category?: string | null;
   /** Pre-computed window verdict from the pure time helper (never Date.now()). */
   window?: { windowDays: number; elapsedDays: number; within: boolean } | null;
 }

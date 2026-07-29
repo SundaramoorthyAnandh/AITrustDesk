@@ -210,6 +210,7 @@ export async function runDraftPipeline(
       customer: input.customer ?? null,
       order: input.order ?? null,
       retrievedDocs: supporting,
+      category,
       window,
     });
     const parsed = DraftLLMResultSchema.parse(raw);
