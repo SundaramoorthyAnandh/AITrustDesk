@@ -21,6 +21,11 @@ import { CategoryChip, Mono, PriorityChip, StatusChip, formatDate } from '../ui'
 const STATUSES = ['', 'open', 'triaged', 'awaiting_agent', 'awaiting_customer', 'resolved', 'closed'];
 const CATEGORIES = ['', 'shipping', 'refund', 'warranty', 'billing', 'account_security', 'general'];
 
+/** Progressive column disclosure — hide low-priority columns on narrow screens. */
+const SM_UP = { display: { xs: 'none', sm: 'table-cell' } } as const;
+const MD_UP = { display: { xs: 'none', md: 'table-cell' } } as const;
+const LG_UP = { display: { xs: 'none', lg: 'table-cell' } } as const;
+
 export function QueuePage() {
   const navigate = useNavigate();
   const [rows, setRows] = useState<TicketRow[] | null>(null);
@@ -45,22 +50,22 @@ export function QueuePage() {
     <Stack spacing={3}>
       <Typography variant="h5">Ticket queue</Typography>
 
-      <Stack direction="row" spacing={2}>
-        <TextField select label="Status" value={status} onChange={(e) => setStatus(e.target.value)} size="small" sx={{ minWidth: 160 }}>
+      <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+        <TextField select label="Status" value={status} onChange={(e) => setStatus(e.target.value)} size="small" sx={{ minWidth: 160, flex: { xs: '1 1 45%', sm: '0 0 auto' } }}>
           {STATUSES.map((s) => (
             <MenuItem key={s} value={s}>
               {s === '' ? 'All' : s.replace(/_/g, ' ')}
             </MenuItem>
           ))}
         </TextField>
-        <TextField select label="Category" value={category} onChange={(e) => setCategory(e.target.value)} size="small" sx={{ minWidth: 180 }}>
+        <TextField select label="Category" value={category} onChange={(e) => setCategory(e.target.value)} size="small" sx={{ minWidth: 180, flex: { xs: '1 1 45%', sm: '0 0 auto' } }}>
           {CATEGORIES.map((c) => (
             <MenuItem key={c} value={c}>
               {c === '' ? 'All' : c.replace(/_/g, ' ')}
             </MenuItem>
           ))}
         </TextField>
-        <TextField select label="Escalated" value={escalated} onChange={(e) => setEscalated(e.target.value)} size="small" sx={{ minWidth: 140 }}>
+        <TextField select label="Escalated" value={escalated} onChange={(e) => setEscalated(e.target.value)} size="small" sx={{ minWidth: 140, flex: { xs: '1 1 45%', sm: '0 0 auto' } }}>
           <MenuItem value="">All</MenuItem>
           <MenuItem value="true">Escalated only</MenuItem>
         </TextField>
@@ -74,16 +79,19 @@ export function QueuePage() {
       )}
 
       {rows && (
-        <Paper variant="outlined">
-          <Table>
+        // Table stays readable on small screens: low-priority columns drop out at
+        // each breakpoint (their data folds into the first cell), and whatever is
+        // still too wide scrolls horizontally instead of being clipped.
+        <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: { xs: 0, sm: 560 } }}>
             <TableHead>
               <TableRow>
                 <TableCell>Ticket</TableCell>
-                <TableCell>Customer</TableCell>
-                <TableCell>Category</TableCell>
-                <TableCell>Priority</TableCell>
+                <TableCell sx={SM_UP}>Customer</TableCell>
+                <TableCell sx={MD_UP}>Category</TableCell>
+                <TableCell sx={MD_UP}>Priority</TableCell>
                 <TableCell>Status</TableCell>
-                <TableCell>Opened</TableCell>
+                <TableCell sx={LG_UP}>Opened</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -94,23 +102,33 @@ export function QueuePage() {
                   sx={{ cursor: 'pointer', ...(t.escalated ? { bgcolor: 'rgba(248,113,113,0.08)' } : {}) }}
                   onClick={() => navigate(`/tickets/${t.id}`)}
                 >
-                  <TableCell sx={{ maxWidth: 320 }}>
+                  <TableCell sx={{ maxWidth: { xs: 200, sm: 260, md: 320 } }}>
                     <Typography variant="body2" fontWeight={650} noWrap title={t.subject ?? ''}>
                       {t.subject ?? '(no subject)'}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.75 }} title={t.id}>
+                    <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.75 }} title={t.id} noWrap>
                       <Mono>{t.id.slice(0, 14)}…</Mono>
                     </Typography>
+                    {/* Columns hidden at this width, folded in so nothing is lost. */}
+                    <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 0.75 }}>
+                      <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap alignItems="center">
+                        <Typography variant="caption" color="text.secondary" sx={{ display: { sm: 'none' } }}>
+                          {t.customerName}
+                        </Typography>
+                        <CategoryChip category={t.category} />
+                        <PriorityChip priority={t.priority} />
+                      </Stack>
+                    </Box>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={SM_UP}>
                     <Typography variant="body2" noWrap>
                       {t.customerName}
                     </Typography>
                   </TableCell>
-                  <TableCell><CategoryChip category={t.category} /></TableCell>
-                  <TableCell><PriorityChip priority={t.priority} /></TableCell>
+                  <TableCell sx={MD_UP}><CategoryChip category={t.category} /></TableCell>
+                  <TableCell sx={MD_UP}><PriorityChip priority={t.priority} /></TableCell>
                   <TableCell><StatusChip status={t.status} /></TableCell>
-                  <TableCell>
+                  <TableCell sx={LG_UP}>
                     <Typography variant="caption" color="text.secondary" noWrap>
                       {formatDate(t.createdAt)}
                     </Typography>

@@ -17,7 +17,12 @@ import {
 } from '@mui/material';
 import AddShoppingCartIcon from '@mui/icons-material/AddShoppingCart';
 import { api, type Order } from '../api';
-import { formatDate, money } from '../ui';
+import { Mono, formatDate, money } from '../ui';
+
+/** Progressive column disclosure — hide low-priority columns on narrow screens. */
+const SM_UP = { display: { xs: 'none', sm: 'table-cell' } } as const;
+const MD_UP = { display: { xs: 'none', md: 'table-cell' } } as const;
+const LG_UP = { display: { xs: 'none', lg: 'table-cell' } } as const;
 
 export function OrdersPage() {
   const [orders, setOrders] = useState<Order[] | null>(null);
@@ -53,33 +58,53 @@ export function OrdersPage() {
       )}
 
       {orders && orders.length > 0 && (
-        <Paper variant="outlined">
-          <Table>
+        // Responsive: secondary columns drop out on narrow screens (their data
+        // folds into the Item cell) and any remainder scrolls instead of clipping.
+        <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
+          <Table sx={{ minWidth: { xs: 0, sm: 560 } }}>
             <TableHead>
               <TableRow>
-                <TableCell>Order</TableCell>
+                <TableCell sx={MD_UP}>Order</TableCell>
                 <TableCell>Item</TableCell>
-                <TableCell align="right">Qty</TableCell>
+                <TableCell align="right" sx={SM_UP}>Qty</TableCell>
                 <TableCell align="right">Total</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Ordered</TableCell>
+                <TableCell sx={SM_UP}>Status</TableCell>
+                <TableCell sx={LG_UP}>Ordered</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {orders.map((o) => (
                 <TableRow key={o.id} hover>
-                  <TableCell>{o.id}</TableCell>
-                  <TableCell>
-                    {o.itemName}
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {o.itemSku}
+                  <TableCell sx={MD_UP} title={o.id}>
+                    <Mono>{o.id.slice(0, 14)}…</Mono>
+                  </TableCell>
+                  <TableCell sx={{ maxWidth: { xs: 200, sm: 280 } }}>
+                    <Typography variant="body2" noWrap title={o.itemName ?? ''}>
+                      {o.itemName}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                      <Mono>{o.itemSku}</Mono>
+                    </Typography>
+                    {/* Folded-in details for the columns hidden at this width. */}
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: { xs: 'block', sm: 'none' }, mt: 0.5 }}
+                    >
+                      Qty {o.quantity} · {o.status} · {formatDate(o.orderDate)}
                     </Typography>
                   </TableCell>
-                  <TableCell align="right">{o.quantity}</TableCell>
-                  <TableCell align="right">{money(o.amountCents, o.currency)}</TableCell>
-                  <TableCell>{o.status}</TableCell>
-                  <TableCell>
-                    <Typography variant="caption">{formatDate(o.orderDate)}</Typography>
+                  <TableCell align="right" sx={SM_UP}>
+                    {o.quantity}
+                  </TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap', fontWeight: 650 }}>
+                    {money(o.amountCents, o.currency)}
+                  </TableCell>
+                  <TableCell sx={SM_UP}>{o.status}</TableCell>
+                  <TableCell sx={LG_UP}>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {formatDate(o.orderDate)}
+                    </Typography>
                   </TableCell>
                 </TableRow>
               ))}

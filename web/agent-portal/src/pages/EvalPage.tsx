@@ -19,6 +19,11 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { api, pollJob, type EvalSummary } from '../api';
 import { CitationChip, Mono } from '../ui';
 
+/** Progressive column disclosure — hide low-priority columns on narrow screens. */
+const SM_UP = { display: { xs: 'none', sm: 'table-cell' } } as const;
+const MD_UP = { display: { xs: 'none', md: 'table-cell' } } as const;
+const LG_UP = { display: { xs: 'none', lg: 'table-cell' } } as const;
+
 const METRIC_LABELS: Record<string, string> = {
   triageAccuracy: 'Triage accuracy',
   priorityAccuracy: 'Priority accuracy',
@@ -103,16 +108,16 @@ export function EvalPage() {
           </Stack>
 
           <Paper variant="outlined" sx={{ overflowX: 'auto' }}>
-            <Table size="small" sx={{ minWidth: 900 }}>
+            <Table size="small" sx={{ minWidth: { xs: 0, md: 900 } }}>
               <TableHead>
                 <TableRow>
                   <TableCell>Case</TableCell>
                   <TableCell>Category</TableCell>
-                  <TableCell>Priority</TableCell>
-                  <TableCell>Draft status</TableCell>
-                  <TableCell>Escalated</TableCell>
-                  <TableCell>Guardrail</TableCell>
-                  <TableCell>Citations</TableCell>
+                  <TableCell sx={MD_UP}>Priority</TableCell>
+                  <TableCell sx={SM_UP}>Draft status</TableCell>
+                  <TableCell sx={LG_UP}>Escalated</TableCell>
+                  <TableCell sx={LG_UP}>Guardrail</TableCell>
+                  <TableCell sx={MD_UP}>Citations</TableCell>
                   <TableCell>Checks</TableCell>
                 </TableRow>
               </TableHead>
@@ -130,11 +135,11 @@ export function EvalPage() {
                         </Typography>
                       </TableCell>
                       <TableCell>{c.predictedCategory}</TableCell>
-                      <TableCell>{c.predictedPriority}</TableCell>
-                      <TableCell>{c.draftStatus}</TableCell>
-                      <TableCell>{c.systemEscalated ? 'yes' : 'no'}</TableCell>
-                      <TableCell>{c.guardrailKind}</TableCell>
-                      <TableCell>
+                      <TableCell sx={MD_UP}>{c.predictedPriority}</TableCell>
+                      <TableCell sx={SM_UP}>{c.draftStatus}</TableCell>
+                      <TableCell sx={LG_UP}>{c.systemEscalated ? 'yes' : 'no'}</TableCell>
+                      <TableCell sx={LG_UP}>{c.guardrailKind}</TableCell>
+                      <TableCell sx={MD_UP}>
                         {c.citations.length ? (
                           <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
                             {c.citations.map((id) => (
