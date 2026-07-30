@@ -5,9 +5,7 @@ import { getDb, getSqlite } from '../db/client.js';
 import { runMigrations } from '../db/migrate.js';
 import { loadAll } from '../loaders/load.js';
 import { evalRuns } from '../db/schema.js';
-import { getProvider, rebuildRetriever, setProvider } from '../container.js';
-import { MockProvider } from '../llm/mock.provider.js';
-import { LangChainProvider } from '../llm/langchain.provider.js';
+import { getProvider, makeProvider, rebuildRetriever, setProvider } from '../container.js';
 import { runDraftPipeline } from '../services/draft.js';
 import { writeTrace } from '../services/traces.js';
 import { scanText, guardrailResultString } from '../domain/guardrails.js';
@@ -270,7 +268,7 @@ if (invokedDirectly) {
   runMigrations();
   loadAll(); // idempotent — guarantees KB docs exist for retrieval
   const wantLangchain = process.argv.includes('--provider=langchain');
-  setProvider(wantLangchain ? new LangChainProvider() : new MockProvider());
+  setProvider(makeProvider(wantLangchain)); // falls back to mock if no key is configured
   runEval()
     .then((summary) => {
       printSummary(summary);
