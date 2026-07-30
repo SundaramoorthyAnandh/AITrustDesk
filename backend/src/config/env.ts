@@ -1,8 +1,10 @@
+import 'dotenv/config'; // load backend/.env in local dev; no-ops when absent (Docker/Render pass real env)
 import { z } from 'zod';
 
 /**
  * Central, validated environment. Fail fast at boot if misconfigured.
  * Everything downstream imports `env` — never reads process.env directly.
+ * Secrets (e.g. OPENAI_API_KEY) belong in backend/.env, which is gitignored.
  */
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -35,7 +37,10 @@ const EnvSchema = z.object({
   // LLM
   LLM_PROVIDER: z.enum(['mock', 'langchain']).default('mock'),
   OPENAI_BASE_URL: z.string().default('http://localhost:1234/v1'),
-  OPENAI_API_KEY: z.string().default('lm-studio'),
+  // Empty by default so "no key configured" is detectable — the provider factory
+  // falls back to the mock when this is blank (see container.ts). For LM Studio,
+  // set any non-empty string (it ignores the value).
+  OPENAI_API_KEY: z.string().default(''),
   MODEL_NAME: z.string().default('local-model'),
   LLM_TEMPERATURE: z.coerce.number().default(0),
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),

@@ -21,7 +21,7 @@ function block(label: string, content: string): string {
 export function buildTriagePrompt(input: TriageInput): { system: string; user: string } {
   const context = [
     input.customer ? `Customer verified: identity=${input.customer.identityVerified}` : '',
-    input.order ? `Order ${input.order.id} status=${input.order.status} date=${input.order.orderDate}` : '',
+    input.order ? `Order ${input.order.id} status=${input.order.status} purchased=${input.order.purchaseDate} registered=${input.order.registeredAt ?? 'n/a'}` : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -60,7 +60,7 @@ export function buildDraftPrompt(input: DraftInput): { system: string; user: str
       'CUSTOMER_ORDER',
       [
         input.customer ? `name=${input.customer.name} identityVerified=${input.customer.identityVerified}` : '',
-        input.order ? `order=${input.order.id} status=${input.order.status} date=${input.order.orderDate} item=${input.order.itemName ?? ''}` : 'no linked order',
+        input.order ? `order=${input.order.id} status=${input.order.status} purchased=${input.order.purchaseDate} registered=${input.order.registeredAt ?? 'n/a'} item=${input.order.itemName ?? ''}` : 'no linked order',
       ]
         .filter(Boolean)
         .join('\n'),

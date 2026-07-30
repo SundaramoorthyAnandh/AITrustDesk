@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, notLike, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../db/client.js';
-import { tickets, customers, orders, drafts, toolCalls, traces, products } from '../db/schema.js';
+import { tickets, customers, orders, drafts, toolCalls, traces, products, documents } from '../db/schema.js';
 import { requireAgent, requireCustomer } from '../auth/preHandlers.js';
 import { getTicketContext } from '../services/context.js';
 import { prefixedId } from '../lib/ids.js';
@@ -248,7 +248,7 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
   app.get('/me/orders', { preHandler: requireCustomer }, async (req, reply) => {
     const customerId = req.principal!.customerId!;
     return reply.send({
-      orders: db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.orderDate)).all(),
+      orders: db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.purchaseDate)).all(),
     });
   });
 
@@ -259,10 +259,18 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // POST /me/orders — place a new order for the authenticated customer
+  // POST /me/orders — register a product the customer already purchased.
+  // purchaseDate is customer-supplied (when they bought it) and anchors the
+  // return/refund/warranty windows; registeredAt is server-stamped to "now".
   const CreateOrderSchema = z.object({
     sku: z.string().min(1),
     quantity: z.number().int().min(1).max(20).default(1),
+    // ISO date (YYYY-MM-DD) or full ISO datetime; must not be in the future.
+    purchaseDate: z
+      .string()
+      .min(1)
+      .refine((v) => !Number.isNaN(Date.parse(v)), { message: 'Invalid purchase date' })
+      .refine((v) => Date.parse(v) <= Date.now(), { message: 'Purchase date cannot be in the future' }),
   });
   app.post('/me/orders', { preHandler: requireCustomer }, async (req, reply) => {
     const parsed = CreateOrderSchema.safeParse(req.body);
@@ -274,24 +282,91 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'bad_request', message: 'Unknown or unavailable product' });
     }
 
+    // One registration per product, per customer. Replacement orders (ORD-REP-*)
+    // reuse the SKU legitimately, so they are excluded from the check.
+    const ALREADY_REGISTERED_MESSAGE =
+      'Product registered already. Please check your registered products once again.';
+    const existing = db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.customerId, customerId),
+          eq(orders.itemSku, product.sku),
+          notLike(orders.id, 'ORD-REP-%'),
+        ),
+      )
+      .get();
+    if (existing) {
+      return reply.code(409).send({ error: 'already_registered', message: ALREADY_REGISTERED_MESSAGE });
+    }
+
     const now = new Date().toISOString();
+    // Normalise a bare date (YYYY-MM-DD) to an ISO instant so window math is stable.
+    const purchaseDate = new Date(parsed.data.purchaseDate).toISOString();
     const id = prefixedId('ORD');
-    db.insert(orders)
-      .values({
-        id,
-        customerId,
-        orderDate: now, // "placed now" — anchors refund/warranty windows from today
-        status: 'placed',
-        itemSku: product.sku,
-        itemName: product.name,
-        quantity: parsed.data.quantity,
-        amountCents: product.priceCents * parsed.data.quantity,
-        currency: product.currency,
-        deliveredAt: null,
-      })
-      .run();
+    try {
+      db.insert(orders)
+        .values({
+          id,
+          customerId,
+          purchaseDate, // when the product was bought — anchors the time-window rules
+          registeredAt: now, // when it was registered with TrustDesk (audit only)
+          status: 'placed',
+          itemSku: product.sku,
+          itemName: product.name,
+          quantity: parsed.data.quantity,
+          amountCents: product.priceCents * parsed.data.quantity,
+          currency: product.currency,
+          deliveredAt: null,
+        })
+        .run();
+    } catch (err) {
+      // Race backstop: the partial unique index rejects a concurrent duplicate
+      // that slipped past the read above. Surface the same friendly warning.
+      if (err instanceof Error && /UNIQUE constraint failed/i.test(err.message)) {
+        return reply.code(409).send({ error: 'already_registered', message: ALREADY_REGISTERED_MESSAGE });
+      }
+      throw err;
+    }
 
     const order = db.select().from(orders).where(eq(orders.id, id)).get();
     return reply.code(201).send({ order });
+  });
+
+  // ── Knowledge base (customer-facing, read-only) ──────────────────────────
+  // Only NON-adversarial docs are ever exposed. KB-ADVERSARIAL-001 (and any
+  // future is_adversarial doc) is internal-only and must never reach a customer.
+  // Customers see the plain-language rewrite; fall back to the canonical body if
+  // a doc hasn't been given one yet. The technical `body` is never sent as-is.
+  const publicKbCols = {
+    docId: documents.docId,
+    title: documents.title,
+    category: documents.category,
+    body: sql<string>`coalesce(${documents.customerBody}, ${documents.body})`,
+  } as const;
+
+  // GET /me/kb — list all customer-visible knowledge-base articles.
+  app.get('/me/kb', { preHandler: requireCustomer }, async (_req, reply) => {
+    const docs = db
+      .select(publicKbCols)
+      .from(documents)
+      .where(eq(documents.isAdversarial, false))
+      .orderBy(asc(documents.category), asc(documents.docId))
+      .all();
+    return reply.send({ documents: docs });
+  });
+
+  // GET /me/kb/:docId — a single article (for the citation popover). 404 if it
+  // doesn't exist OR is adversarial (indistinguishable to the customer on purpose).
+  app.get('/me/kb/:docId', { preHandler: requireCustomer }, async (req, reply) => {
+    const { docId } = req.params as { docId: string };
+    const doc = db
+      .select(publicKbCols)
+      .from(documents)
+      .where(and(eq(documents.docId, docId), eq(documents.isAdversarial, false)))
+      .get();
+    if (!doc) return reply.code(404).send({ error: 'not_found' });
+    return reply.send({ document: doc });
   });
 }

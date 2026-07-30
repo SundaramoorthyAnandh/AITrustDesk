@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getDb } from '../db/client.js';
 import { tickets, drafts } from '../db/schema.js';
 import { requireAgent } from '../auth/preHandlers.js';
+import { isTicketReadOnly, TICKET_READ_ONLY_ERROR } from '../domain/ticketStatus.js';
 import { getRetriever } from '../container.js';
 import { runTriage } from '../services/triage.js';
 import { runDraft } from '../services/draft.js';
@@ -20,6 +21,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
   app.post('/agent/tickets/:id/triage', { preHandler: requireAgent }, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!ticketExists(id)) return reply.code(404).send({ error: 'not_found' });
+    if (isTicketReadOnly(id)) return reply.code(409).send(TICKET_READ_ONLY_ERROR);
     const job = jobQueue.enqueue('triage', () => runTriage(id), { ticketId: id });
     return reply.code(202).send({ jobId: job.id, status: job.status });
   });
@@ -28,6 +30,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
   app.post('/agent/tickets/:id/draft', { preHandler: requireAgent }, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (!ticketExists(id)) return reply.code(404).send({ error: 'not_found' });
+    if (isTicketReadOnly(id)) return reply.code(409).send(TICKET_READ_ONLY_ERROR);
     const agentId = req.principal!.accountId;
     const job = jobQueue.enqueue('draft', () => runDraft(id, { agentId }), { ticketId: id });
     return reply.code(202).send({ jobId: job.id, status: job.status });
@@ -65,6 +68,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
 
     const draft = db.select().from(drafts).where(eq(drafts.id, draftId)).get();
     if (!draft) return reply.code(404).send({ error: 'not_found' });
+    if (isTicketReadOnly(draft.ticketId)) return reply.code(409).send(TICKET_READ_ONLY_ERROR);
     if (draft.status === 'sent') {
       return reply.code(409).send({ error: 'conflict', message: 'Sent replies cannot be edited.' });
     }
@@ -97,6 +101,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     const { draftId } = req.params as { draftId: string };
     const draft = db.select().from(drafts).where(eq(drafts.id, draftId)).get();
     if (!draft) return reply.code(404).send({ error: 'not_found' });
+    if (isTicketReadOnly(draft.ticketId)) return reply.code(409).send(TICKET_READ_ONLY_ERROR);
     if (draft.status === 'sent') {
       return reply.code(409).send({ error: 'conflict', message: 'Reply has already been sent.' });
     }

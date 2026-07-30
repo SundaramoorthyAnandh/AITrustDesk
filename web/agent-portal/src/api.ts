@@ -58,7 +58,8 @@ export interface Customer {
 }
 export interface Order {
   id: string;
-  orderDate: string;
+  purchaseDate: string; // anchors return/refund/warranty windows
+  registeredAt: string | null; // when registered with TrustDesk (audit only)
   status: string;
   itemName: string | null;
   itemSku: string | null;

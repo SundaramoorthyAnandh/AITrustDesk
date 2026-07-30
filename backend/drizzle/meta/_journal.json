@@ -29,6 +29,27 @@
       "when": 1785270495004,
       "tag": "0003_bored_fixer",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785270595004,
+      "tag": "0004_purchase_registration_dates",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1785270695004,
+      "tag": "0005_one_registration_per_product",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1785270795004,
+      "tag": "0006_kb_customer_body",
+      "breakpoints": true
     }
   ]
 }

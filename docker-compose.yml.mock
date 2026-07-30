@@ -1,0 +1,72 @@
+# TrustDesk — MOCK-ONLY fallback stack.
+#
+# Use this when you want the deterministic mock provider guaranteed — no real
+# LLM, no OpenAI key, no dependency on backend/.env. It is a drop-in replacement
+# for docker-compose.yml (same ports / container names), so running it swaps the
+# live stack over to the mock:
+#
+#   docker compose -f docker-compose.yml.mock up -d --build
+#
+# To go back to the .env-driven stack (OpenAI/LangChain):
+#
+#   docker compose up -d
+#
+# Difference vs docker-compose.yml: this file pins LLM_PROVIDER=mock and the JWT
+# secrets inline and has NO env_file, so backend/.env is never read — the mock is
+# used even if a real key is sitting in .env.
+#
+# Then: Customer http://localhost:8080 · Agent http://localhost:8081 · API http://localhost:4000
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: trustdesk-api
+    # Everything is inline and self-contained — intentionally NO env_file, so this
+    # stack can never be pulled onto a real provider by a stray backend/.env.
+    environment:
+      NODE_ENV: production
+      SEED_ON_BOOT: "true" # ephemeral container FS → reseed on boot
+      LLM_PROVIDER: mock # <- guaranteed mock; ignores any OPENAI_* / .env
+      HOST: 0.0.0.0
+      PORT: "4000"
+      CORS_ORIGINS: "http://localhost:8080,http://localhost:8081,http://localhost:5173,http://localhost:5174"
+      # Demo secrets — fine for local/mock use; change for anything non-local.
+      CUSTOMER_JWT_SECRET: "dev-customer-secret-change-me"
+      AGENT_JWT_SECRET: "dev-agent-secret-change-me"
+      SEED_DEFAULT_PASSWORD: "Password123!"
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  customer:
+    build:
+      context: .
+      dockerfile: web/customer-portal/Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:4000"
+    image: trustdesk-customer
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  agent:
+    build:
+      context: .
+      dockerfile: web/agent-portal/Dockerfile
+      args:
+        VITE_API_URL: "http://localhost:4000"
+    image: trustdesk-agent
+    ports:
+      - "8081:80"
+    depends_on:
+      api:
+        condition: service_healthy

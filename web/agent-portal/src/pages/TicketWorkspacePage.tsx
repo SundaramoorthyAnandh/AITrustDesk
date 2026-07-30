@@ -20,11 +20,12 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import GppMaybeIcon from '@mui/icons-material/GppMaybe';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import SearchIcon from '@mui/icons-material/Search';
-import EditNoteIcon from '@mui/icons-material/EditNote';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SendIcon from '@mui/icons-material/Send';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
@@ -40,7 +41,7 @@ import {
   type ToolCatalogEntry,
   type Trace,
 } from '../api';
-import { CategoryChip, CitationChip, DraftStatusChip, Mono, PriorityChip, StatusChip, formatDate, money } from '../ui';
+import { CategoryChip, CitationChip, Mono, PriorityChip, StatusChip, formatDate, money } from '../ui';
 import { ValidatedTextField, validators, firstError, type Validator } from '../components/ValidatedTextField';
 
 interface TriageJobResult {
@@ -131,7 +132,9 @@ export function TicketWorkspacePage() {
     );
 
   const { ticket, customer, order } = ctx;
-  const latestDraft = drafts.length > 0 ? drafts[drafts.length - 1] : null;
+  // A closed/resolved ticket is read-only: no AI runs, no replies, no actions —
+  // only reopening is allowed. (Also enforced server-side.)
+  const readOnly = ticket.status === 'closed' || ticket.status === 'resolved';
 
   return (
     <Stack spacing={2}>
@@ -153,7 +156,7 @@ export function TicketWorkspacePage() {
           <PriorityChip priority={ticket.priority} />
           <StatusChip status={ticket.status} />
           {ticket.escalated && <Chip size="small" color="warning" icon={<GppMaybeIcon />} label="escalated" />}
-          {ticket.status === 'closed' ? (
+          {readOnly ? (
             <Button size="small" variant="outlined" color="primary" onClick={() => doPatchStatus('open')} disabled={busy === 'patch'}>
               Reopen ticket
             </Button>
@@ -170,9 +173,44 @@ export function TicketWorkspacePage() {
         </Stack>
       </Stack>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-        {/* Left column: context + message */}
-        <Stack spacing={2}>
+      {readOnly && (
+        <Alert severity="info">
+          This ticket is {ticket.status}. Reopen to reply.
+        </Alert>
+      )}
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.3fr) minmax(0, 1fr)' },
+          gap: 2,
+          alignItems: 'start',
+        }}
+      >
+        {/* Left: one unified WhatsApp-style conversation + reply composer */}
+        <ConversationPanel
+          ticket={ticket}
+          drafts={drafts}
+          readOnly={readOnly}
+          generating={busy === 'draft'}
+          sending={busy === 'send'}
+          editing={busy === 'edit'}
+          onGenerate={doDraft}
+          onSend={doSend}
+          onEdit={doEdit}
+        />
+
+        {/* Right: customer/order context + AI tools — its own scroll, capped at 80vh */}
+        <Box
+          sx={{
+            maxHeight: { md: '80vh' },
+            overflowY: { md: 'auto' },
+            position: { md: 'sticky' },
+            top: { md: 16 },
+            pr: { md: 0.5 },
+          }}
+        >
+          <Stack spacing={2}>
           <Card variant="outlined">
             <CardContent>
               <Typography variant="overline" color="text.secondary">
@@ -199,13 +237,45 @@ export function TicketWorkspacePage() {
                 Order context
               </Typography>
               {order ? (
-                <Typography variant="body2" sx={{ mt: 0.5 }} title={order.id}>
-                  <Mono>{order.id.slice(0, 14)}…</Mono> · {order.itemName} (<Mono>{order.itemSku}</Mono>) ·{' '}
-                  {money(order.amountCents, order.currency)}
-                  <br />
-                  ordered {formatDate(order.orderDate)} · status {order.status}
-                  {order.deliveredAt ? ` · delivered ${formatDate(order.deliveredAt)}` : ''}
-                </Typography>
+                <Box sx={{ mt: 0.75 }}>
+                  <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                    <Typography variant="body2" fontWeight={600} noWrap title={order.itemName ?? ''}>
+                      {order.itemName ?? 'Item'}
+                    </Typography>
+                    <Chip size="small" variant="outlined" label={order.status} sx={{ flexShrink: 0 }} />
+                  </Stack>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr',
+                      columnGap: 1.5,
+                      rowGap: 0.5,
+                      mt: 1,
+                      '& .lbl': { color: 'text.secondary' },
+                    }}
+                  >
+                    <Typography variant="caption" className="lbl">SKU</Typography>
+                    <Typography variant="caption"><Mono>{order.itemSku ?? '—'}</Mono></Typography>
+                    <Typography variant="caption" className="lbl">Amount</Typography>
+                    <Typography variant="caption">{money(order.amountCents, order.currency)}</Typography>
+                    <Typography variant="caption" className="lbl">Order ID</Typography>
+                    <Typography variant="caption" noWrap title={order.id}><Mono>{order.id}</Mono></Typography>
+                    <Typography variant="caption" className="lbl">Purchased</Typography>
+                    <Typography variant="caption">{formatDate(order.purchaseDate)}</Typography>
+                    {order.registeredAt && (
+                      <>
+                        <Typography variant="caption" className="lbl">Registered</Typography>
+                        <Typography variant="caption">{formatDate(order.registeredAt)}</Typography>
+                      </>
+                    )}
+                    {order.deliveredAt && (
+                      <>
+                        <Typography variant="caption" className="lbl">Delivered</Typography>
+                        <Typography variant="caption">{formatDate(order.deliveredAt)}</Typography>
+                      </>
+                    )}
+                  </Box>
+                </Box>
               ) : (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   No linked order
@@ -216,69 +286,12 @@ export function TicketWorkspacePage() {
 
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="overline" color="text.secondary">
-                Conversation History
-              </Typography>
-              <Stack spacing={1.5} sx={{ mt: 1 }}>
-                <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'background.default', border: '1px solid', borderColor: 'divider' }}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
-                    <Typography variant="caption" fontWeight={700} color="primary">
-                      Customer (Initial message)
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {formatDate(ticket.createdAt)}
-                    </Typography>
-                  </Stack>
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{ticket.body}</Typography>
-                </Box>
-
-                {[...drafts]
-                  .filter((d) => d.status === 'sent' || d.status === 'customer_reply')
-                  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-                  .map((d) => {
-                    const isCustomer = d.status === 'customer_reply';
-                    return (
-                      <Box
-                        key={d.id}
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 1.5,
-                          bgcolor: isCustomer ? 'background.default' : 'action.hover',
-                          border: '1px solid',
-                          borderColor: isCustomer ? 'divider' : 'primary.light',
-                          ml: isCustomer ? 0 : 2,
-                          mr: isCustomer ? 2 : 0,
-                        }}
-                      >
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
-                          <Typography variant="caption" fontWeight={700} color={isCustomer ? 'primary' : 'secondary'}>
-                            {isCustomer ? 'Customer (Reply)' : 'Support Agent (Sent reply)'}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {formatDate(d.createdAt)}
-                          </Typography>
-                        </Stack>
-                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{d.text}</Typography>
-                      </Box>
-                    );
-                  })}
-              </Stack>
-            </CardContent>
-          </Card>
-
-          <RetrievalCard hits={hits} busy={busy === 'search'} onSearch={doSearch} />
-        </Stack>
-
-        {/* Right column: AI actions */}
-        <Stack spacing={2}>
-          <Card variant="outlined">
-            <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Typography variant="subtitle1" fontWeight={700}>
                   <PsychologyIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
                   AI triage
                 </Typography>
-                <Button size="small" variant="contained" onClick={doTriage} disabled={busy === 'triage'}>
+                <Button size="small" variant="contained" onClick={doTriage} disabled={busy === 'triage' || readOnly}>
                   {busy === 'triage' ? 'Running…' : 'Run triage'}
                 </Button>
               </Stack>
@@ -296,15 +309,7 @@ export function TicketWorkspacePage() {
             </CardContent>
           </Card>
 
-          <DraftCard
-            draft={latestDraft}
-            busy={busy === 'draft'}
-            onGenerate={doDraft}
-            onSend={doSend}
-            onEdit={doEdit}
-            sending={busy === 'send'}
-            editing={busy === 'edit'}
-          />
+          <RetrievalCard hits={hits} busy={busy === 'search'} readOnly={readOnly} onSearch={doSearch} />
 
           <ActionCard
             ticket={ticket}
@@ -312,10 +317,12 @@ export function TicketWorkspacePage() {
             catalog={catalog}
             actions={actions}
             busy={busy}
+            readOnly={readOnly}
             onChanged={refresh}
             setError={setError}
           />
-        </Stack>
+          </Stack>
+        </Box>
       </Box>
 
       <TracesCard traces={traces} />
@@ -323,7 +330,17 @@ export function TicketWorkspacePage() {
   );
 }
 
-function RetrievalCard({ hits, busy, onSearch }: { hits: SearchHit[] | null; busy: boolean; onSearch: () => void }) {
+function RetrievalCard({
+  hits,
+  busy,
+  readOnly,
+  onSearch,
+}: {
+  hits: SearchHit[] | null;
+  busy: boolean;
+  readOnly: boolean;
+  onSearch: () => void;
+}) {
   return (
     <Card variant="outlined">
       <CardContent>
@@ -332,7 +349,7 @@ function RetrievalCard({ hits, busy, onSearch }: { hits: SearchHit[] | null; bus
             <SearchIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
             Policy retrieval
           </Typography>
-          <Button size="small" variant="outlined" onClick={onSearch} disabled={busy}>
+          <Button size="small" variant="outlined" onClick={onSearch} disabled={busy || readOnly}>
             {busy ? 'Searching…' : 'Search KB'}
           </Button>
         </Stack>
@@ -359,140 +376,241 @@ function RetrievalCard({ hits, busy, onSearch }: { hits: SearchHit[] | null; bus
   );
 }
 
-function DraftCard({
-  draft,
-  busy,
+const UNSENT_DRAFT = new Set(['draft', 'escalated', 'refused']);
+
+/**
+ * One WhatsApp-style panel: conversation history (customer + sent agent replies)
+ * as chat bubbles, plus a composer at the bottom. "Generate draft" runs the AI
+ * draft job; the result drops into the composer where the agent edits it, and
+ * "Send" saves any edit then sends — exactly the jobs the old two cards did.
+ */
+function ConversationPanel({
+  ticket,
+  drafts,
+  readOnly,
+  generating,
   sending,
   editing,
   onGenerate,
   onSend,
   onEdit,
 }: {
-  draft: Draft | null;
-  busy: boolean;
+  ticket: Ticket;
+  drafts: Draft[];
+  readOnly: boolean;
+  generating: boolean;
   sending: boolean;
   editing: boolean;
   onGenerate: () => void;
-  onSend: (draftId: string) => void;
+  onSend: (draftId: string) => Promise<void>;
   onEdit: (draftId: string, text: string) => Promise<void>;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [text, setText] = useState('');
+  // The latest still-unsent draft is what the composer edits + sends.
+  const latest = drafts.length > 0 ? drafts[drafts.length - 1] : null;
+  const sendable = latest && UNSENT_DRAFT.has(latest.status) ? latest : null;
 
-  const startEdit = () => {
-    if (!draft) return;
-    setText(draft.text);
-    setIsEditing(true);
+  const [text, setText] = useState('');
+  const [loadedId, setLoadedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (sendable) {
+      // A freshly generated/regenerated draft loads into the composer once.
+      if (sendable.id !== loadedId) {
+        setText(sendable.text);
+        setLoadedId(sendable.id);
+      }
+    } else if (loadedId) {
+      // The draft we were holding got sent — clear the composer.
+      setText('');
+      setLoadedId(null);
+    }
+  }, [sendable, loadedId]);
+
+  const messages = [
+    { key: 'initial', role: 'customer' as const, text: ticket.body, at: ticket.createdAt, citations: [], edited: false },
+    ...[...drafts]
+      .filter((d) => d.status === 'sent' || d.status === 'customer_reply')
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .map((d) => ({
+        key: d.id,
+        role: (d.status === 'customer_reply' ? 'customer' : 'agent') as 'customer' | 'agent',
+        text: d.text,
+        at: d.createdAt,
+        citations: d.citations,
+        edited: Boolean(d.editedAt),
+      })),
+  ];
+
+  const handleSend = async () => {
+    if (!sendable || !text.trim()) return;
+    if (text.trim() !== sendable.text.trim()) await onEdit(sendable.id, text);
+    await onSend(sendable.id);
   };
-  const save = async () => {
-    if (!draft) return;
-    await onEdit(draft.id, text);
-    setIsEditing(false);
-  };
+
+  const busyAny = generating || sending || editing || readOnly;
 
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+    <Card
+      variant="outlined"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        maxHeight: { xs: '85vh', md: '80vh' },
+        position: { md: 'sticky' },
+        top: { md: 16 },
+      }}
+    >
+      <CardContent sx={{ p: 0, '&:last-child': { pb: 0 }, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <Box sx={{ px: 2, py: 1.5, flexShrink: 0 }}>
           <Typography variant="subtitle1" fontWeight={700}>
-            <EditNoteIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-            Cited draft reply
+            Conversation
           </Typography>
-          <Button size="small" variant="contained" onClick={onGenerate} disabled={busy || isEditing}>
-            {busy ? 'Generating…' : draft ? 'Regenerate' : 'Generate draft'}
-          </Button>
-        </Stack>
+        </Box>
+        <Divider />
 
-        {!draft && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            No draft yet. Generate a grounded reply from retrieved policy.
-          </Typography>
-        )}
+        {/* Chat thread — grows to fill, scrolls internally when long */}
+        <Box
+          sx={{
+            px: 2,
+            py: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.25,
+            flex: 1,
+            minHeight: 140,
+            overflowY: 'auto',
+            bgcolor: 'background.default',
+          }}
+        >
+          {messages.map((m) => (
+            <MessageBubble key={m.key} role={m.role} text={m.text} at={m.at} citations={m.citations} edited={m.edited} />
+          ))}
+        </Box>
 
-        {draft && (
-          <Box sx={{ mt: 1.5 }}>
-            <Stack direction="row" spacing={1} sx={{ mb: 1 }} alignItems="center">
-              <DraftStatusChip status={draft.status} />
-              {draft.editedAt && <Chip size="small" variant="outlined" label="edited by agent" />}
-            </Stack>
-            {draft.status === 'refused' && (
-              <Alert severity="error" sx={{ mb: 1.5 }}>
-                Guardrail blocked / refused — reason: {draft.text}
-              </Alert>
-            )}
-            {draft.status === 'escalated' && (
-              <Alert severity="warning" sx={{ mb: 1.5 }}>
-                Guardrail blocked or escalated to human review — reason: {draft.text}
-              </Alert>
-            )}
+        <Divider />
 
-            {isEditing ? (
-              <TextField
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                fullWidth
-                multiline
-                minRows={6}
-                autoFocus
-                disabled={editing}
-                helperText="Edit the reply before sending. Citations are preserved."
-              />
-            ) : (
-              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                {draft.text}
+        {/* Composer — pinned at the bottom of the panel */}
+        <Box sx={{ p: 2, flexShrink: 0 }}>
+          {sendable?.status === 'refused' && (
+            <Alert severity="error" sx={{ mb: 1.5 }}>
+              Guardrail refused this reply — review it before sending.
+            </Alert>
+          )}
+          {sendable?.status === 'escalated' && (
+            <Alert severity="warning" sx={{ mb: 1.5 }}>
+              Escalated to human review — edit as needed before sending.
+            </Alert>
+          )}
+          {sendable && sendable.citations.length > 0 && (
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }} alignItems="center">
+              <Typography variant="caption" color="text.secondary">
+                Grounded in:
               </Typography>
-            )}
-
-            {draft.citations.length > 0 && (
-              <Stack direction="row" spacing={1} sx={{ mt: 1.5 }} flexWrap="wrap" useFlexGap>
-                <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-                  Citations:
-                </Typography>
-                {draft.citations.map((c) => (
-                  <CitationChip key={c} id={c} />
-                ))}
-              </Stack>
-            )}
-
-            {draft.status !== 'sent' && (
-              <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-                {isEditing ? (
-                  <>
-                    <Button size="small" variant="contained" onClick={save} disabled={editing || !text.trim()}>
-                      {editing ? 'Saving…' : 'Save changes'}
-                    </Button>
-                    <Button size="small" onClick={() => setIsEditing(false)} disabled={editing}>
-                      Cancel
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button size="small" variant="outlined" startIcon={<EditNoteIcon />} onClick={startEdit}>
-                      Edit
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      color="primary"
-                      startIcon={<SendIcon />}
-                      disabled={sending}
-                      onClick={() => onSend(draft.id)}
-                    >
-                      Send to customer
-                    </Button>
-                  </>
-                )}
-              </Stack>
-            )}
-            {draft.status === 'sent' && (
-              <Alert severity="success" sx={{ mt: 2 }}>
-                Sent to the customer.
-              </Alert>
-            )}
-          </Box>
-        )}
+              {sendable.citations.map((c) => (
+                <CitationChip key={c} id={c} />
+              ))}
+            </Stack>
+          )}
+          <TextField
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={
+              readOnly
+                ? 'This ticket is read-only.'
+                : sendable
+                  ? 'Edit the AI draft, then send to the customer…'
+                  : 'Generate an AI draft to reply to the customer…'
+            }
+            fullWidth
+            multiline
+            minRows={3}
+            maxRows={12}
+            disabled={sending || editing || readOnly}
+          />
+          <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ mt: 1.5 }}>
+            <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={onGenerate} disabled={busyAny}>
+              {generating ? 'Generating…' : sendable ? 'Regenerate draft' : 'Generate draft'}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<SendIcon />}
+              onClick={handleSend}
+              disabled={!sendable || !text.trim() || busyAny}
+            >
+              {sending ? 'Sending…' : 'Send'}
+            </Button>
+          </Stack>
+          {readOnly ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              * Ticket is {ticket.status} — reopen it to reply.
+            </Typography>
+          ) : (
+            !sendable && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                Replies are sent from an AI-generated, policy-grounded draft. Generate one to edit and send.
+              </Typography>
+            )
+          )}
+        </Box>
       </CardContent>
     </Card>
+  );
+}
+
+function MessageBubble({
+  role,
+  text,
+  at,
+  citations = [],
+  edited = false,
+}: {
+  role: 'customer' | 'agent';
+  text: string;
+  at: string;
+  citations?: string[];
+  edited?: boolean;
+}) {
+  const isAgent = role === 'agent';
+  return (
+    <Box sx={{ display: 'flex', justifyContent: isAgent ? 'flex-end' : 'flex-start' }}>
+      <Box
+        sx={(t) => ({
+          maxWidth: '85%',
+          px: 1.5,
+          py: 1,
+          borderRadius: 2,
+          borderTopRightRadius: isAgent ? 4 : 16,
+          borderTopLeftRadius: isAgent ? 16 : 4,
+          border: '1px solid',
+          borderColor: isAgent ? alpha(t.palette.primary.main, 0.5) : t.palette.divider,
+          bgcolor: isAgent ? alpha(t.palette.primary.main, 0.16) : t.palette.background.paper,
+        })}
+      >
+        <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="center" sx={{ mb: 0.25 }}>
+          <Typography variant="caption" fontWeight={700} color={isAgent ? 'primary' : 'text.secondary'}>
+            {isAgent ? 'Support agent' : 'Customer'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {formatDate(at)}
+          </Typography>
+        </Stack>
+        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+          {text}
+        </Typography>
+        {citations.length > 0 && (
+          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+            {citations.map((c) => (
+              <CitationChip key={c} id={c} />
+            ))}
+          </Stack>
+        )}
+        {edited && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>
+            edited by agent
+          </Typography>
+        )}
+      </Box>
+    </Box>
   );
 }
 
@@ -513,6 +631,7 @@ function ActionCard({
   catalog,
   actions,
   busy,
+  readOnly,
   onChanged,
   setError,
 }: {
@@ -521,6 +640,7 @@ function ActionCard({
   catalog: ToolCatalogEntry[];
   actions: ToolCall[];
   busy: string | null;
+  readOnly: boolean;
   onChanged: () => Promise<void>;
   setError: (m: string | null) => void;
 }) {
@@ -571,11 +691,11 @@ function ActionCard({
     <Card variant="outlined">
       <CardContent>
         <Typography variant="subtitle1" fontWeight={700}>
-          Sensitive action (human approval required)
+          Human Approval
         </Typography>
 
         <Stack spacing={1.5} sx={{ mt: 1.5 }}>
-          <TextField select label="Tool" value={tool} onChange={(e) => setTool(e.target.value)} size="small">
+          <TextField select label="Tool" value={tool} onChange={(e) => setTool(e.target.value)} size="small" disabled={readOnly}>
             {(catalog.length
               ? catalog.map((c) => ({ name: c.name, label: c.label || c.name }))
               : Object.keys(TOOL_FIELDS).map((name) => ({ name, label: name }))
@@ -599,6 +719,7 @@ function ActionCard({
                 size="small"
                 value={args[f] ?? ''}
                 InputProps={{ readOnly: true }}
+                disabled
                 helperText="From the ticket’s order (read-only)"
               />
             ) : (
@@ -613,7 +734,7 @@ function ActionCard({
               />
             ),
           )}
-          <Button variant="outlined" onClick={recommend} disabled={busy != null || orderMissing || !argsValid}>
+          <Button variant="outlined" onClick={recommend} disabled={busy != null || orderMissing || !argsValid || readOnly}>
             Recommend action
           </Button>
         </Stack>
@@ -652,10 +773,10 @@ function ActionCard({
                   )}
                   {a.status === 'pending' && (
                     <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                      <Button size="small" variant="contained" color="success" onClick={() => decide(a.id, 'approve')}>
+                      <Button size="small" variant="contained" color="success" onClick={() => decide(a.id, 'approve')} disabled={readOnly}>
                         Approve
                       </Button>
-                      <Button size="small" variant="outlined" color="error" onClick={() => decide(a.id, 'reject')}>
+                      <Button size="small" variant="outlined" color="error" onClick={() => decide(a.id, 'reject')} disabled={readOnly}>
                         Reject
                       </Button>
                     </Stack>

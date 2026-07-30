@@ -5,9 +5,7 @@ import { getDb, getSqlite } from '../db/client.js';
 import { runMigrations } from '../db/migrate.js';
 import { loadAll } from '../loaders/load.js';
 import { evalRuns } from '../db/schema.js';
-import { getProvider, rebuildRetriever, setProvider } from '../container.js';
-import { MockProvider } from '../llm/mock.provider.js';
-import { LangChainProvider } from '../llm/langchain.provider.js';
+import { getProvider, makeProvider, rebuildRetriever, setProvider } from '../container.js';
 import { runDraftPipeline } from '../services/draft.js';
 import { writeTrace } from '../services/traces.js';
 import { scanText, guardrailResultString } from '../domain/guardrails.js';
@@ -91,12 +89,59 @@ export interface EvalSummary {
   cases: CaseResult[];
 }
 
+/** Resolve `p`, but never block longer than `ms` — fall back to `onTimeout()`. */
+function withTimeout<T>(p: Promise<T>, ms: number, onTimeout: () => T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    let settled = false;
+    const done = (v: T) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const timer = setTimeout(() => done(onTimeout()), ms);
+    p.then(done, () => done(onTimeout()));
+  });
+}
+
 export async function runEval(provider: LLMProvider = getProvider()): Promise<EvalSummary> {
   rebuildRetriever(); // ensure the index reflects loaded documents
   const cases = readCases();
-  const results: CaseResult[] = [];
 
-  for (const c of cases) {
+  // With a real LLM (langchain), each case makes several network calls. Run the
+  // cases with bounded concurrency and cap each one, so a slow or hung provider
+  // can never make the whole run take forever. The mock provider is unaffected.
+  const CONCURRENCY = Math.max(1, Number(process.env.EVAL_CONCURRENCY ?? 6));
+  const CASE_TIMEOUT_MS = Math.max(1_000, Number(process.env.EVAL_CASE_TIMEOUT_MS ?? 40_000));
+
+  type Case = (typeof cases)[number];
+
+  // A case that exceeds its budget counts as a failure (honest — the provider
+  // didn't produce a usable answer in time), never a silent success.
+  const timedOutResult = (c: Case): CaseResult => {
+    const e = c.expect;
+    return {
+      id: c.id,
+      description: c.description,
+      predictedCategory: '(timed out)',
+      predictedPriority: '(timed out)',
+      systemEscalated: true,
+      draftStatus: 'timeout',
+      guardrailKind: 'none',
+      citations: [],
+      checks: {
+        categoryCorrect: e.category != null ? false : null,
+        priorityCorrect: e.priority != null ? false : null,
+        escalateCorrect: e.escalate != null ? false : null,
+        citationCovered: e.citations && e.citations.length > 0 ? false : null,
+        unsafeBlocked: e.adversarial ? false : null,
+        guardrailKindCorrect: e.guardrail ? false : null,
+        windowCorrect: e.within_window != null ? false : null,
+      },
+    };
+  };
+
+  const runOne = async (c: Case): Promise<CaseResult> => {
     const text = `${c.input.subject ?? ''}\n${c.input.body}`;
     const guardrail = scanText(text);
 
@@ -109,7 +154,7 @@ export async function runEval(provider: LLMProvider = getProvider()): Promise<Ev
         subject: c.input.subject ?? null,
         body: c.input.body,
         order: c.input.order
-          ? ({ id: 'EVAL', orderDate: c.input.order.order_date, status: c.input.order.status, itemName: c.input.order.item_name } as OrderContext)
+          ? ({ id: 'EVAL', purchaseDate: c.input.order.order_date, status: c.input.order.status, itemName: c.input.order.item_name } as OrderContext)
           : null,
         customer: null,
       });
@@ -130,7 +175,7 @@ export async function runEval(provider: LLMProvider = getProvider()): Promise<Ev
     const order: OrderContext | null = c.input.order
       ? {
           id: 'EVAL-ORDER',
-          orderDate: c.input.order.order_date,
+          purchaseDate: c.input.order.order_date,
           status: c.input.order.status,
           itemName: c.input.order.item_name,
           itemSku: c.input.order.sku,
@@ -174,7 +219,7 @@ export async function runEval(provider: LLMProvider = getProvider()): Promise<Ev
       detail: { caseId: c.id, category, priority, systemEscalated, citations: draft.citations },
     });
 
-    results.push({
+    return {
       id: c.id,
       description: c.description,
       predictedCategory: category,
@@ -184,8 +229,20 @@ export async function runEval(provider: LLMProvider = getProvider()): Promise<Ev
       guardrailKind: draft.guardrail.kind,
       citations: draft.citations,
       checks,
-    });
-  }
+    };
+  };
+
+  // Bounded-concurrency worker pool; results kept in case order for the summary.
+  const results: CaseResult[] = new Array(cases.length);
+  let next = 0;
+  const worker = async () => {
+    for (;;) {
+      const i = next++;
+      if (i >= cases.length) return;
+      results[i] = await withTimeout(runOne(cases[i]), CASE_TIMEOUT_MS, () => timedOutResult(cases[i]));
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, cases.length) }, () => worker()));
 
   const count = (sel: (r: CaseResult) => boolean | null) => {
     let numer = 0;
@@ -270,7 +327,7 @@ if (invokedDirectly) {
   runMigrations();
   loadAll(); // idempotent — guarantees KB docs exist for retrieval
   const wantLangchain = process.argv.includes('--provider=langchain');
-  setProvider(wantLangchain ? new LangChainProvider() : new MockProvider());
+  setProvider(makeProvider(wantLangchain)); // falls back to mock if no key is configured
   runEval()
     .then((summary) => {
       printSummary(summary);

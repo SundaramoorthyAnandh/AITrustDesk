@@ -14,7 +14,7 @@ describe('draft grounding gate', () => {
     const r = await runDraftPipeline({
       subject: 'Return power bank',
       body: 'I would like to return my unused power bank for a refund.',
-      order: { id: 'ORD-5010', orderDate: '2026-07-14T12:00:00Z', status: 'delivered', itemName: 'VoltCore 20K Power Bank' },
+      order: { id: 'ORD-5010', purchaseDate: '2026-07-14T12:00:00Z', status: 'delivered', itemName: 'VoltCore 20K Power Bank' },
       ticketCreatedAt: '2026-07-18T09:30:00Z',
       categoryHint: 'refund',
     });

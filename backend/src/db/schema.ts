@@ -5,6 +5,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 
 /**
  * TrustDesk schema (SQLite / Drizzle).
@@ -14,7 +15,7 @@ import {
  *    are stored VERBATIM — evals match on strings like `KB-REFUND-001`.
  *  - System-generated rows use UUID TEXT PKs (crypto.randomUUID via newId()).
  *  - Timestamps are ISO-8601 TEXT (UTC). The time rule compares ticket.created_at
- *    and order.order_date — never Date.now() (see domain/time.ts).
+ *    and order.purchase_date — never Date.now() (see domain/time.ts).
  *  - JSON columns use text({mode:'json'}) so the DB stays portable to Postgres.
  *  - AUTH IS SPLIT: customers and agents authenticate against physically separate
  *    tables (customer_accounts / agent_accounts) with independent credentials,
@@ -47,7 +48,13 @@ export const orders = sqliteTable(
     customerId: text('customer_id')
       .notNull()
       .references(() => customers.id),
-    orderDate: text('order_date').notNull(), // ISO date — anchor for the time rule
+    // When the product was PURCHASED — the anchor for every time-window rule
+    // (return / refund / warranty). Never Date.now(). See domain/time.ts.
+    purchaseDate: text('purchase_date').notNull(),
+    // When the customer REGISTERED the product with TrustDesk. Informational /
+    // audit only — distinct from the purchase date and never drives eligibility.
+    // Nullable so pre-existing rows migrate cleanly (backfilled to purchase_date).
+    registeredAt: text('registered_at'),
     status: text('status').notNull(), // placed | shipped | delivered | cancelled | returned
     itemSku: text('item_sku'),
     itemName: text('item_name'),
@@ -59,6 +66,13 @@ export const orders = sqliteTable(
   (t) => ({
     customerIdx: index('orders_customer_idx').on(t.customerId),
     statusIdx: index('orders_status_idx').on(t.status),
+    // A customer may register a given product (SKU) only ONCE. Enforced at the DB
+    // level so concurrent requests can't slip a duplicate past the route check.
+    // Scoped to self-registrations: system-created replacement orders (id prefix
+    // `ORD-REP-`) legitimately reuse the original SKU and are excluded.
+    customerRegistrationSkuUq: uniqueIndex('orders_customer_registration_sku_uq')
+      .on(t.customerId, t.itemSku)
+      .where(sql`${t.itemSku} is not null and ${t.id} not like 'ORD-REP-%'`),
   }),
 );
 
@@ -168,7 +182,11 @@ export const documents = sqliteTable(
   {
     docId: text('doc_id').primaryKey(), // KB-* — VERBATIM, evals depend on it
     title: text('title').notNull(),
+    // Canonical policy text — agent/eval/retrieval facing (may cite tools, roles).
     body: text('body').notNull(),
+    // Optional plain-language rewrite shown to CUSTOMERS. Never used for grounding
+    // or retrieval; the customer KB endpoints return this in place of `body`.
+    customerBody: text('customer_body'),
     category: text('category'),
     // Docs flagged unsafe are still retrievable but must be treated as pure DATA.
     isAdversarial: integer('is_adversarial', { mode: 'boolean' }).notNull().default(false),

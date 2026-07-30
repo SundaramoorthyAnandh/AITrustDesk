@@ -45,7 +45,7 @@ function MetricTile({ label, value, denom }: { label: string; value: number; den
         </Typography>
         {denom != null && (
           <Typography variant="caption" color="text.secondary">
-            n = {denom}
+            {denom} cases checked
           </Typography>
         )}
       </CardContent>
@@ -73,7 +73,9 @@ export function EvalPage() {
     setError(null);
     try {
       const { jobId } = await api.runEval();
-      const result = await pollJob<EvalSummary>(jobId, 60_000);
+      // A real-LLM eval runs many calls; the backend bounds it, but give the
+      // poller a wide enough window to catch the result (mock finishes instantly).
+      const result = await pollJob<EvalSummary>(jobId, 180_000);
       setSummary(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Eval failed');
@@ -99,7 +101,7 @@ export function EvalPage() {
       {summary && (
         <>
           <Typography variant="body2" color="text.secondary">
-            Provider: <strong>{summary.provider}</strong> · {summary.totalCases} cases
+            Provider: <strong>{summary.provider}</strong> · {summary.totalCases} evaluation cases in total.
           </Typography>
           <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
             {Object.entries(summary.metrics).map(([k, v]) => (

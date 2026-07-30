@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getDb } from '../db/client.js';
 import { toolCalls, tickets, toolCatalog, approvals } from '../db/schema.js';
 import { requireAgent } from '../auth/preHandlers.js';
+import { isTicketReadOnly, TICKET_READ_ONLY_ERROR } from '../domain/ticketStatus.js';
 import { recommendAction, approveAction, rejectAction, ActionError, type ToolName } from '../services/actions.js';
 
 const RecommendSchema = z.object({
@@ -38,6 +39,7 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
     if (!db.select({ id: tickets.id }).from(tickets).where(eq(tickets.id, id)).get()) {
       return reply.code(404).send({ error: 'not_found' });
     }
+    if (isTicketReadOnly(id)) return reply.code(409).send(TICKET_READ_ONLY_ERROR);
     const parsed = RecommendSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'bad_request', details: parsed.error.flatten() });
     const headerKey = req.headers['idempotency-key'];
@@ -72,6 +74,8 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const parsed = DecisionSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: 'bad_request' });
+    const owner = db.select({ ticketId: toolCalls.ticketId }).from(toolCalls).where(eq(toolCalls.id, id)).get();
+    if (owner && isTicketReadOnly(owner.ticketId)) return reply.code(409).send(TICKET_READ_ONLY_ERROR);
     try {
       const tc = approveAction({ toolCallId: id, decidedBy: req.principal!.accountId, note: parsed.data.note });
       return reply.send(tc);
@@ -86,6 +90,8 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const parsed = DecisionSchema.safeParse(req.body ?? {});
     if (!parsed.success) return reply.code(400).send({ error: 'bad_request' });
+    const owner = db.select({ ticketId: toolCalls.ticketId }).from(toolCalls).where(eq(toolCalls.id, id)).get();
+    if (owner && isTicketReadOnly(owner.ticketId)) return reply.code(409).send(TICKET_READ_ONLY_ERROR);
     try {
       const tc = rejectAction({ toolCallId: id, decidedBy: req.principal!.accountId, note: parsed.data.note });
       return reply.send(tc);

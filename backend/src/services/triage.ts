@@ -35,7 +35,8 @@ export async function runTriage(
       order: ctx.order
         ? {
             id: ctx.order.id,
-            orderDate: ctx.order.orderDate,
+            purchaseDate: ctx.order.purchaseDate,
+            registeredAt: ctx.order.registeredAt,
             status: ctx.order.status,
             itemName: ctx.order.itemName,
             itemSku: ctx.order.itemSku,

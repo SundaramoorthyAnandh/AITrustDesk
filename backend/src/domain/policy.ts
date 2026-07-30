@@ -11,15 +11,16 @@ export const WINDOW_DAYS: Partial<Record<Category, number>> = {
 };
 
 /**
- * Compute the window verdict for a ticket, if the category is time-bound and an
- * order date exists. Always uses ticket.created_at + order date — never the clock.
+ * Compute the window verdict for a ticket, if the category is time-bound and a
+ * purchase date exists. Always uses ticket.created_at + purchase date — never the
+ * clock, and never the product-registration date.
  */
 export function windowForTicket(
   category: Category,
-  orderDate: string | null | undefined,
+  purchaseDate: string | null | undefined,
   ticketCreatedAt: string,
 ): WindowEvaluation | null {
   const windowDays = WINDOW_DAYS[category];
-  if (windowDays == null || !orderDate) return null;
-  return evaluateWindow(orderDate, ticketCreatedAt, windowDays);
+  if (windowDays == null || !purchaseDate) return null;
+  return evaluateWindow(purchaseDate, ticketCreatedAt, windowDays);
 }
