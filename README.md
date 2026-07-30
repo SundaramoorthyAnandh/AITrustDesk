@@ -172,44 +172,91 @@ and final status.
 
 ---
 
-## API reference (selected)
+## API reference
 
-All non-auth routes require a `Bearer` token of the correct audience.
+Base URL (local): `http://localhost:4000`. All JSON. Protected routes require a
+`Bearer <accessToken>` JWT whose **audience matches the route family** — a customer token
+is rejected on `/agent/*` and vice-versa. Errors return `{ error, message }` or
+`{ error:"bad_request", details:{ fieldErrors } }`. Access tokens are short-lived
+(~15 min); use the refresh endpoints to rotate. AI/eval endpoints return `202 {jobId}` — poll
+`GET /jobs/:jobId`.
 
-### Auth
-| Method | Path | Auth | Body |
+### System
+| Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| POST | `/auth/customer/register` | — | `{name,email,password}` |
-| POST | `/auth/customer/login` | — | `{email,password}` |
-| POST | `/auth/agent/login` | — | `{email,password}` |
-| POST | `/auth/{customer,agent}/refresh` | — | `{refreshToken}` |
-| POST | `/auth/{customer,agent}/logout` | — | `{refreshToken}` |
-| GET | `/auth/{customer,agent}/me` | that principal | — |
+| GET | `/health` | — | Liveness: `{status,service,time}` |
 
-### Customer (own data only)
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/me/orders` | Orders to attach to a complaint. |
-| POST | `/me/tickets` | File a complaint `{subject,body,orderId?}`. |
-| GET | `/me/tickets` | List own tickets. |
-| GET | `/me/tickets/:id` | Own ticket + order + sent replies. |
+### Auth — customer (audience `trustdesk-customer`)
+| Method | Path | Auth | Body → Result |
+| --- | --- | --- | --- |
+| POST | `/auth/customer/register` | — | `{name,email,password}` → `201` tokens + `profile` (self-registration) |
+| POST | `/auth/customer/login` | — | `{email,password}` → tokens + profile (`401`/`423` on invalid/locked) |
+| POST | `/auth/customer/refresh` | — | `{refreshToken}` → new token pair (rotates; old one revoked) |
+| POST | `/auth/customer/logout` | — | `{refreshToken}` → `204` |
+| GET | `/auth/customer/me` | customer | → `{profile}` |
+| POST | `/auth/customer/password` | customer | `{currentPassword,newPassword}` → `204` (blocks reuse; **revokes all sessions**) |
 
-### Agent
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/agent/tickets` | Queue (filters: `status,category,escalated`). |
-| GET | `/agent/tickets/:id` | Ticket + customer + order context. |
-| POST | `/agent/tickets/:id/triage` | **Job** → `{jobId}`; poll `GET /jobs/:id`. |
-| POST | `/agent/tickets/:id/draft` | **Job** → `{jobId}`. |
-| GET | `/agent/tickets/:id/search` | Retrieval preview. |
-| GET | `/agent/tickets/:id/{drafts,actions,traces}` | Sub-resources. |
-| POST | `/agent/drafts/:id/send` | Publish a grounded draft to the customer. |
-| GET | `/agent/catalog` | Tool catalog. |
-| POST | `/agent/tickets/:id/actions` | **Recommend** a sensitive action (status `pending`). |
-| POST | `/agent/actions/:id/approve` | Approve → execute **exactly once** (idempotent). |
-| POST | `/agent/actions/:id/reject` | Reject → never executes. |
-| POST | `/agent/eval` | **Job** → run the eval harness. |
-| GET | `/agent/eval/latest` | Last persisted summary. |
+### Auth — agent (audience `trustdesk-agent`; no self-registration)
+| Method | Path | Auth | Body → Result |
+| --- | --- | --- | --- |
+| POST | `/auth/agent/login` | — | `{email,password}` → tokens + profile (incl. `role`) |
+| POST | `/auth/agent/refresh` | — | `{refreshToken}` → new token pair |
+| POST | `/auth/agent/logout` | — | `{refreshToken}` → `204` |
+| GET | `/auth/agent/me` | agent | → `{profile}` |
+| POST | `/auth/agent/password` | agent | `{currentPassword,newPassword}` → `204` |
+
+### Customer — self-service (scoped to caller)
+| Method | Path | Auth | Body → Result |
+| --- | --- | --- | --- |
+| GET | `/me/products` | customer | → `{products}` (active catalog, priced in ₹/INR) |
+| POST | `/me/orders` | customer | `{sku,quantity(1–20)}` → `201 {order}` (priced server-side, dated now) |
+| GET | `/me/orders` | customer | → `{orders}` |
+| POST | `/me/tickets` | customer | `{subject,body,orderId?}` → `201 {ticket,customer,order}` (orderId must belong to caller) |
+| GET | `/me/tickets` | customer | → `{tickets}` |
+| GET | `/me/tickets/:id` | customer | → `{ticket,order,replies}` (own only; conversation thread) |
+| POST | `/me/tickets/:id/reply` | customer | `{text}` → follow-up reply (`400` if closed) |
+| PATCH | `/me/tickets/:id` | customer | `{status}` → close / reopen own ticket |
+
+### Agent — ticket workspace
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/agent/tickets` | agent | Queue; query `status,category,escalated,limit,offset` |
+| GET | `/agent/tickets/:id` | agent | Ticket + customer + order context |
+| GET | `/agent/tickets/:id/drafts` | agent | Draft history |
+| GET | `/agent/tickets/:id/actions` | agent | Proposed / executed tool actions |
+| GET | `/agent/tickets/:id/traces` | agent | Audit traces |
+| GET | `/agent/tickets/:id/latest-draft` | agent | Most recent draft (or `null`) |
+| GET | `/agent/tickets/:id/search` | agent | Retrieval preview; query `q` → `{query,hits}` |
+| PATCH | `/agent/tickets/:id` | agent | `{status?,assign?}` → assign / change status |
+
+### Agent — AI pipeline (non-blocking jobs)
+| Method | Path | Auth | Result |
+| --- | --- | --- | --- |
+| POST | `/agent/tickets/:id/triage` | agent | `202 {jobId}` → `{ticket,triage}` |
+| POST | `/agent/tickets/:id/draft` | agent | `202 {jobId}` → grounded / refused / escalated draft |
+| GET | `/jobs/:jobId` | agent | Job `{status,result,error}` (poll until `done`/`error`) |
+
+### Agent — drafts
+| Method | Path | Auth | Body → Result |
+| --- | --- | --- | --- |
+| PATCH | `/agent/drafts/:draftId` | agent | `{text,citations?}` → edit draft (only while `draft`; `409` if `sent`; audited) |
+| POST | `/agent/drafts/:draftId/send` | agent | → publish draft to customer (`status:"sent"`) |
+
+### Agent — sensitive actions (approval-gated)
+| Method | Path | Auth | Body → Result |
+| --- | --- | --- | --- |
+| GET | `/agent/catalog` | agent | → `{tools}` (name, label, sensitive, requiresApproval) |
+| POST | `/agent/tickets/:id/actions` | agent | `{toolName,args,idempotencyKey?}` (or `Idempotency-Key` header) → `201` pending; **`400` if no/ mismatched linked order** |
+| GET | `/agent/actions/:id` | agent | → tool_call + `{approvals}` |
+| POST | `/agent/actions/:id/approve` | agent | `{note?}` → executes **exactly once** (idempotent; `409` if rejected) |
+| POST | `/agent/actions/:id/reject` | agent | `{note?}` → `rejected` (never executes) |
+
+### Agent — evaluations
+| Method | Path | Auth | Result |
+| --- | --- | --- | --- |
+| POST | `/agent/eval` | agent | `202 {jobId}` → 4-metric summary |
+| GET | `/agent/eval/latest` | agent | → `{run\|null}` most recent summary |
+| GET | `/agent/eval/runs` | agent | → `{runs}` (history) |
 
 ---
 
