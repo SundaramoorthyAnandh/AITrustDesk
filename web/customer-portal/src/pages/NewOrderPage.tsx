@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material';
 import { api, type Product } from '../api';
-import { money } from '../ui';
+import { money, Mono } from '../ui';
 
 export function NewOrderPage() {
   const navigate = useNavigate();
@@ -54,7 +54,7 @@ export function NewOrderPage() {
   return (
     <Box>
       <Typography variant="h5" mb={2}>
-        Place a new order
+        Register a product
       </Typography>
       <Card variant="outlined">
         <CardContent sx={{ p: 3 }}>
@@ -71,7 +71,7 @@ export function NewOrderPage() {
               >
                 {productList.map((p) => (
                   <MenuItem key={p.sku} value={p.sku}>
-                    {p.name} — {money(p.priceCents, p.currency)}
+                    <Mono>{p.sku}</Mono> - {p.name}
                   </MenuItem>
                 ))}
               </TextField>

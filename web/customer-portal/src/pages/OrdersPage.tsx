@@ -38,9 +38,9 @@ export function OrdersPage() {
   return (
     <Stack spacing={3}>
       <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="h5">My orders</Typography>
+        <Typography variant="h5">Registered Products</Typography>
         <Button variant="contained" startIcon={<AddShoppingCartIcon />} component={RouterLink} to="/orders/new">
-          Add Order
+          Register New Product
         </Button>
       </Stack>
 
@@ -53,7 +53,7 @@ export function OrdersPage() {
 
       {orders && orders.length === 0 && (
         <Card variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.secondary">No orders yet. Place one to get started.</Typography>
+          <Typography color="text.secondary">No products registered yet. Register one to get started.</Typography>
         </Card>
       )}
 

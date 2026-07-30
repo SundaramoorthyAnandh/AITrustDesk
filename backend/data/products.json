@@ -1,12 +1,72 @@
 [
-  { "sku": "AUD-WH-100", "name": "Aurora Wireless Headphones", "category": "electronics", "price_cents": 12900, "currency": "INR" },
-  { "sku": "AUD-SPK-BT", "name": "BoomBox Mini Speaker", "category": "electronics", "price_cents": 6900, "currency": "INR" },
-  { "sku": "APP-WATCH-2", "name": "PulseFit Smart Watch 2", "category": "electronics", "price_cents": 19900, "currency": "INR" },
-  { "sku": "ELC-CHRG-USB", "name": "65W USB-C Charger", "category": "electronics", "price_cents": 3500, "currency": "INR" },
-  { "sku": "ELC-PWRBNK", "name": "VoltCore 20K Power Bank", "category": "electronics", "price_cents": 4200, "currency": "INR" },
-  { "sku": "KIT-BLND-7", "name": "ProBlend 700 Blender", "category": "kitchen", "price_cents": 8900, "currency": "INR" },
-  { "sku": "KIT-KNIFE-8", "name": "ChefEdge 8-Piece Knife Set", "category": "kitchen", "price_cents": 11900, "currency": "INR" },
-  { "sku": "HOM-LAMP-LED", "name": "Halo LED Desk Lamp", "category": "home", "price_cents": 5400, "currency": "INR" },
-  { "sku": "APP-TSHIRT-M", "name": "Everyday Cotton T-Shirt (M)", "category": "apparel", "price_cents": 2000, "currency": "INR" },
-  { "sku": "GFT-CARD-50", "name": "₹50 Gift Card", "category": "gift_card", "price_cents": 5000, "currency": "INR" }
+  {
+    "sku": "AUD-WH-100",
+    "name": "Aurora Wireless Headphones",
+    "category": "electronics",
+    "price_cents": 200000,
+    "currency": "INR"
+  },
+  {
+    "sku": "AUD-SPK-BT",
+    "name": "BoomBox Mini Speaker",
+    "category": "electronics",
+    "price_cents": 150000,
+    "currency": "INR"
+  },
+  {
+    "sku": "APP-WATCH-2",
+    "name": "PulseFit Smart Watch 2",
+    "category": "electronics",
+    "price_cents": 400000,
+    "currency": "INR"
+  },
+  {
+    "sku": "ELC-CHRG-USB",
+    "name": "65W USB-C Charger",
+    "category": "electronics",
+    "price_cents": 320000,
+    "currency": "INR"
+  },
+  {
+    "sku": "ELC-PWRBNK",
+    "name": "VoltCore 20K Power Bank",
+    "category": "electronics",
+    "price_cents": 170000,
+    "currency": "INR"
+  },
+  {
+    "sku": "KIT-BLND-7",
+    "name": "ProBlend 700 Blender",
+    "category": "kitchen",
+    "price_cents": 100000,
+    "currency": "INR"
+  },
+  {
+    "sku": "KIT-KNIFE-8",
+    "name": "ChefEdge 8-Piece Knife Set",
+    "category": "kitchen",
+    "price_cents": 50000,
+    "currency": "INR"
+  },
+  {
+    "sku": "HOM-LAMP-LED",
+    "name": "Halo LED Desk Lamp",
+    "category": "home",
+    "price_cents": 80000,
+    "currency": "INR"
+  },
+  {
+    "sku": "APP-TSHIRT-M",
+    "name": "Everyday Cotton T-Shirt (M)",
+    "category": "apparel",
+    "price_cents": 150000,
+    "currency": "INR"
+  },
+  {
+    "sku": "GFT-CARD-500",
+    "name": "₹500 Gift Card",
+    "category": "gift_card",
+    "price_cents": 50000,
+    "currency": "INR"
+  }
 ]
