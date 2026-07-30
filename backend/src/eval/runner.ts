@@ -14,7 +14,7 @@ import { newId } from '../lib/ids.js';
 import type { LLMProvider, OrderContext } from '../llm/provider.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CASES_PATH = resolve(__dirname, '../../data/eval_cases.jsonl');
+const CASES_PATH = resolve(__dirname, '../../data/eval_cases.json');
 
 interface EvalCase {
   id: string;
@@ -64,11 +64,11 @@ interface CaseResult {
 }
 
 function readCases(): EvalCase[] {
-  return readFileSync(CASES_PATH, 'utf-8')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => JSON.parse(l) as EvalCase);
+  const content = readFileSync(CASES_PATH, 'utf-8');
+  // eval_cases.json contains concatenated multi-line JSON objects, e.g., {} \n {} \n {}
+  // We can parse them by wrapping the content in brackets and adding commas between objects
+  const arrayLike = `[${content.replace(/}\s*\{/g, '},{')}]`;
+  return JSON.parse(arrayLike) as EvalCase[];
 }
 
 function pct(numer: number, denom: number): number {

@@ -55,13 +55,17 @@ function MetricTile({ label, value, denom }: { label: string; value: number; den
 
 export function EvalPage() {
   const [summary, setSummary] = useState<EvalSummary | null>(null);
+  const [lastRunAt, setLastRunAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
   const loadLatest = () =>
     api
       .latestEval()
-      .then((r) => setSummary(r.run?.summary ?? null))
+      .then((r) => {
+        setSummary(r.run?.summary ?? null);
+        setLastRunAt(r.run?.startedAt ?? null);
+      })
       .catch((e) => setError(e.message));
 
   useEffect(() => {
@@ -77,6 +81,7 @@ export function EvalPage() {
       // poller a wide enough window to catch the result (mock finishes instantly).
       const result = await pollJob<EvalSummary>(jobId, 180_000);
       setSummary(result);
+      setLastRunAt(new Date().toISOString());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Eval failed');
     } finally {
@@ -100,8 +105,11 @@ export function EvalPage() {
 
       {summary && (
         <>
+          <Typography variant="body2" color="text.primary">
+            Provider: <strong>{summary.provider}</strong> · {summary.totalCases} evaluation cases in total
+          </Typography>
           <Typography variant="body2" color="text.secondary">
-            Provider: <strong>{summary.provider}</strong> · {summary.totalCases} evaluation cases in total.
+            {lastRunAt && `Last run: ${new Date(lastRunAt).toLocaleString()}`}
           </Typography>
           <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
             {Object.entries(summary.metrics).map(([k, v]) => (
