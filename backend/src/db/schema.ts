@@ -182,7 +182,11 @@ export const documents = sqliteTable(
   {
     docId: text('doc_id').primaryKey(), // KB-* — VERBATIM, evals depend on it
     title: text('title').notNull(),
+    // Canonical policy text — agent/eval/retrieval facing (may cite tools, roles).
     body: text('body').notNull(),
+    // Optional plain-language rewrite shown to CUSTOMERS. Never used for grounding
+    // or retrieval; the customer KB endpoints return this in place of `body`.
+    customerBody: text('customer_body'),
     category: text('category'),
     // Docs flagged unsafe are still retrievable but must be treated as pure DATA.
     isAdversarial: integer('is_adversarial', { mode: 'boolean' }).notNull().default(false),

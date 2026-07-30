@@ -69,6 +69,8 @@ interface RawDoc {
   doc_id: string;
   title: string;
   body: string;
+  /** Plain-language customer-facing rewrite (optional). */
+  customer_body?: string;
   category?: string;
   is_adversarial?: boolean;
 }
@@ -186,6 +188,7 @@ export function loadAll(nowIso = new Date().toISOString()): { counts: Record<str
         docId: d.doc_id,
         title: d.title,
         body: d.body,
+        customerBody: d.customer_body ?? null,
         category: d.category ?? null,
         isAdversarial: Boolean(d.is_adversarial),
         createdAt: nowIso,
@@ -195,6 +198,7 @@ export function loadAll(nowIso = new Date().toISOString()): { counts: Record<str
         set: {
           title: d.title,
           body: d.body,
+          customerBody: d.customer_body ?? null,
           category: d.category ?? null,
           isAdversarial: Boolean(d.is_adversarial),
         },

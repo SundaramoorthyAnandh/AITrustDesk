@@ -29,6 +29,12 @@ export interface Order {
   currency: string;
   deliveredAt: string | null;
 }
+export interface KbDoc {
+  docId: string;
+  title: string;
+  category: string | null;
+  body: string;
+}
 export interface Product {
   sku: string;
   name: string;
@@ -173,6 +179,8 @@ export const api = {
     }),
   orders: () => request<{ orders: Order[] }>('/me/orders'),
   products: () => request<{ products: Product[] }>('/me/products'),
+  kb: () => request<{ documents: KbDoc[] }>('/me/kb'),
+  kbDoc: (docId: string) => request<{ document: KbDoc }>(`/me/kb/${encodeURIComponent(docId)}`),
   createOrder: (payload: { sku: string; quantity: number; purchaseDate: string }) =>
     request<{ order: Order }>('/me/orders', { method: 'POST', body: JSON.stringify(payload) }),
   tickets: () => request<{ tickets: Ticket[] }>('/me/tickets'),

@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   CircularProgress,
   Divider,
   Link,
@@ -18,6 +17,7 @@ import {
 import SendIcon from '@mui/icons-material/Send';
 import { api, type Order, type Reply, type Ticket } from '../api';
 import { PriorityChip, StatusChip, formatDate, money } from '../ui';
+import { KbCitationChip } from '../components/KbCitationChip';
 
 export function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -187,7 +187,7 @@ export function TicketDetailPage() {
                         Based on policy:
                       </Typography>
                       {r.citations.map((c) => (
-                        <Chip key={c} label={c} size="small" variant="outlined" />
+                        <KbCitationChip key={c} docId={c} />
                       ))}
                     </Stack>
                   )}

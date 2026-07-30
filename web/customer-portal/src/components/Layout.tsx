@@ -8,6 +8,7 @@ import { AccountMenu } from './AccountMenu';
 const NAV = [
   { label: 'Complaints', to: '/' },
   { label: 'Orders', to: '/orders' },
+  { label: 'Warranty Info', to: '/warranty-info' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {

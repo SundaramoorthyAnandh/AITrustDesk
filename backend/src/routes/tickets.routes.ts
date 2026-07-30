@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { and, asc, desc, eq, inArray, notLike } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, notLike, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../db/client.js';
-import { tickets, customers, orders, drafts, toolCalls, traces, products } from '../db/schema.js';
+import { tickets, customers, orders, drafts, toolCalls, traces, products, documents } from '../db/schema.js';
 import { requireAgent, requireCustomer } from '../auth/preHandlers.js';
 import { getTicketContext } from '../services/context.js';
 import { prefixedId } from '../lib/ids.js';
@@ -332,5 +332,41 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
 
     const order = db.select().from(orders).where(eq(orders.id, id)).get();
     return reply.code(201).send({ order });
+  });
+
+  // ── Knowledge base (customer-facing, read-only) ──────────────────────────
+  // Only NON-adversarial docs are ever exposed. KB-ADVERSARIAL-001 (and any
+  // future is_adversarial doc) is internal-only and must never reach a customer.
+  // Customers see the plain-language rewrite; fall back to the canonical body if
+  // a doc hasn't been given one yet. The technical `body` is never sent as-is.
+  const publicKbCols = {
+    docId: documents.docId,
+    title: documents.title,
+    category: documents.category,
+    body: sql<string>`coalesce(${documents.customerBody}, ${documents.body})`,
+  } as const;
+
+  // GET /me/kb — list all customer-visible knowledge-base articles.
+  app.get('/me/kb', { preHandler: requireCustomer }, async (_req, reply) => {
+    const docs = db
+      .select(publicKbCols)
+      .from(documents)
+      .where(eq(documents.isAdversarial, false))
+      .orderBy(asc(documents.category), asc(documents.docId))
+      .all();
+    return reply.send({ documents: docs });
+  });
+
+  // GET /me/kb/:docId — a single article (for the citation popover). 404 if it
+  // doesn't exist OR is adversarial (indistinguishable to the customer on purpose).
+  app.get('/me/kb/:docId', { preHandler: requireCustomer }, async (req, reply) => {
+    const { docId } = req.params as { docId: string };
+    const doc = db
+      .select(publicKbCols)
+      .from(documents)
+      .where(and(eq(documents.docId, docId), eq(documents.isAdversarial, false)))
+      .get();
+    if (!doc) return reply.code(404).send({ error: 'not_found' });
+    return reply.send({ document: doc });
   });
 }
