@@ -1,7 +1,21 @@
-// Accepts a full URL or a bare host (Render injects the API host via fromService);
-// prepends https:// when no protocol is present and strips any trailing slash.
+// Accepts a full URL or a bare host; prepends https:// when no protocol is present
+// and strips any trailing slash. When VITE_API_URL is unset we assume local dev
+// (http://localhost:4000). In a deployed build a missing value is a build-time
+// misconfiguration that would otherwise make the SPA call its own static origin —
+// so we fail loudly rather than silently 404 against index.html.
 function resolveApiUrl(raw: string | undefined): string {
-  if (!raw) return 'http://localhost:4000';
+  if (!raw) {
+    const onLocalhost =
+      typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+    if (typeof window !== 'undefined' && !onLocalhost) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[TrustDesk] VITE_API_URL is not set for this build. API calls will fail. ' +
+          'Set VITE_API_URL to the API host and redeploy the static site.',
+      );
+    }
+    return 'http://localhost:4000';
+  }
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   return withProto.replace(/\/+$/, '');
 }
