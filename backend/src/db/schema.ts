@@ -5,6 +5,7 @@ import {
   index,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
 
 /**
  * TrustDesk schema (SQLite / Drizzle).
@@ -65,6 +66,13 @@ export const orders = sqliteTable(
   (t) => ({
     customerIdx: index('orders_customer_idx').on(t.customerId),
     statusIdx: index('orders_status_idx').on(t.status),
+    // A customer may register a given product (SKU) only ONCE. Enforced at the DB
+    // level so concurrent requests can't slip a duplicate past the route check.
+    // Scoped to self-registrations: system-created replacement orders (id prefix
+    // `ORD-REP-`) legitimately reuse the original SKU and are excluded.
+    customerRegistrationSkuUq: uniqueIndex('orders_customer_registration_sku_uq')
+      .on(t.customerId, t.itemSku)
+      .where(sql`${t.itemSku} is not null and ${t.id} not like 'ORD-REP-%'`),
   }),
 );
 

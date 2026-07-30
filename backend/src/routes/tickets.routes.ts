@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, notLike } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../db/client.js';
 import { tickets, customers, orders, drafts, toolCalls, traces, products } from '../db/schema.js';
@@ -282,25 +282,53 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'bad_request', message: 'Unknown or unavailable product' });
     }
 
+    // One registration per product, per customer. Replacement orders (ORD-REP-*)
+    // reuse the SKU legitimately, so they are excluded from the check.
+    const ALREADY_REGISTERED_MESSAGE =
+      'Product registered already. Please check your registered products once again.';
+    const existing = db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.customerId, customerId),
+          eq(orders.itemSku, product.sku),
+          notLike(orders.id, 'ORD-REP-%'),
+        ),
+      )
+      .get();
+    if (existing) {
+      return reply.code(409).send({ error: 'already_registered', message: ALREADY_REGISTERED_MESSAGE });
+    }
+
     const now = new Date().toISOString();
     // Normalise a bare date (YYYY-MM-DD) to an ISO instant so window math is stable.
     const purchaseDate = new Date(parsed.data.purchaseDate).toISOString();
     const id = prefixedId('ORD');
-    db.insert(orders)
-      .values({
-        id,
-        customerId,
-        purchaseDate, // when the product was bought — anchors the time-window rules
-        registeredAt: now, // when it was registered with TrustDesk (audit only)
-        status: 'placed',
-        itemSku: product.sku,
-        itemName: product.name,
-        quantity: parsed.data.quantity,
-        amountCents: product.priceCents * parsed.data.quantity,
-        currency: product.currency,
-        deliveredAt: null,
-      })
-      .run();
+    try {
+      db.insert(orders)
+        .values({
+          id,
+          customerId,
+          purchaseDate, // when the product was bought — anchors the time-window rules
+          registeredAt: now, // when it was registered with TrustDesk (audit only)
+          status: 'placed',
+          itemSku: product.sku,
+          itemName: product.name,
+          quantity: parsed.data.quantity,
+          amountCents: product.priceCents * parsed.data.quantity,
+          currency: product.currency,
+          deliveredAt: null,
+        })
+        .run();
+    } catch (err) {
+      // Race backstop: the partial unique index rejects a concurrent duplicate
+      // that slipped past the read above. Surface the same friendly warning.
+      if (err instanceof Error && /UNIQUE constraint failed/i.test(err.message)) {
+        return reply.code(409).send({ error: 'already_registered', message: ALREADY_REGISTERED_MESSAGE });
+      }
+      throw err;
+    }
 
     const order = db.select().from(orders).where(eq(orders.id, id)).get();
     return reply.code(201).send({ order });
