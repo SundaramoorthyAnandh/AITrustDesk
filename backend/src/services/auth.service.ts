@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
-import { customers, customerAccounts, agentAccounts } from '../db/schema.js';
+import { customers, customerAccounts, agentAccounts, refreshTokens } from '../db/schema.js';
 import { hashPassword, verifyPassword, isPasswordAcceptable } from '../auth/password.js';
 import { issueTokens, type IssuedTokens, type Principal } from '../auth/tokens.js';
 import { newId, prefixedId } from '../lib/ids.js';
@@ -159,6 +159,54 @@ function clearFailures(type: 'customer' | 'agent', id: string): void {
   db.update(table)
     .set({ failedLoginCount: 0, lockedUntil: null, lastLoginAt: now, updatedAt: now })
     .where(eq(table.id, id))
+    .run();
+}
+
+/**
+ * Change the password of the signed-in principal.
+ *
+ * Requires the current password (a logged-in session alone is not enough — this
+ * blocks a hijacked tab from locking the owner out). On success every refresh
+ * token for that principal is revoked, so other sessions are signed out.
+ */
+export async function changePassword(input: {
+  principalType: 'customer' | 'agent';
+  accountId: string;
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  const db = getDb();
+  const table = input.principalType === 'customer' ? customerAccounts : agentAccounts;
+
+  const acct = db.select().from(table).where(eq(table.id, input.accountId)).get();
+  if (!acct) throw new AuthError('Account not found', 'invalid_credentials');
+  assertNotLocked(acct.lockedUntil, acct.status);
+
+  const ok = await verifyPassword(input.currentPassword, acct.passwordHash);
+  if (!ok) throw new AuthError('Current password is incorrect', 'invalid_credentials');
+
+  if (!isPasswordAcceptable(input.newPassword)) {
+    throw new AuthError('New password must be 8-200 characters', 'bad_request');
+  }
+  if (await verifyPassword(input.newPassword, acct.passwordHash)) {
+    throw new AuthError('New password must be different from the current one', 'bad_request');
+  }
+
+  const now = new Date().toISOString();
+  db.update(table)
+    .set({ passwordHash: await hashPassword(input.newPassword), updatedAt: now })
+    .where(eq(table.id, input.accountId))
+    .run();
+
+  // Invalidate every existing session for this principal.
+  db.update(refreshTokens)
+    .set({ revokedAt: now })
+    .where(
+      and(
+        eq(refreshTokens.principalType, input.principalType),
+        eq(refreshTokens.principalId, input.accountId),
+      ),
+    )
     .run();
 }
 

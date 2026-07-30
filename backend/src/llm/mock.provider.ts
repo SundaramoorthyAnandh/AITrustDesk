@@ -38,12 +38,16 @@ export class MockProvider implements LLMProvider {
       };
     }
 
+    const alreadySentSet = new Set(input.alreadySentCitations ?? []);
+    const newDocs = docs.filter((d) => !alreadySentSet.has(d.docId));
+    const newCitations = newDocs.map((d) => d.docId);
+
     const parts: string[] = [];
     parts.push(`Hi ${input.customer?.name ?? 'there'},`);
     parts.push('');
 
-    // Reflect the time-rule verdict deterministically when present.
-    if (input.window) {
+    // Reflect the time-rule verdict deterministically ONLY on the first turn (when no previous citations sent)
+    if (input.window && alreadySentSet.size === 0) {
       if (input.window.within) {
         parts.push(
           `Your order (placed ${input.order?.orderDate?.slice(0, 10)}) is within the applicable ${input.window.windowDays}-day window (${input.window.elapsedDays} days elapsed), so it is eligible.`,
@@ -56,16 +60,20 @@ export class MockProvider implements LLMProvider {
       parts.push('');
     }
 
-    parts.push(`Based on our policy (${citations.join(', ')}):`);
-    for (const d of docs) {
-      const firstSentence = d.body.split('. ')[0] ?? d.body;
-      parts.push(`• ${d.title}: ${firstSentence}.`);
+    // Only include policy details if NEW KB policy docs exist that haven't been sent yet
+    if (newDocs.length > 0) {
+      parts.push(`Based on our policy (${newCitations.join(', ')}):`);
+      for (const d of newDocs) {
+        const firstSentence = d.body.split('. ')[0] ?? d.body;
+        parts.push(`• ${d.title}: ${firstSentence}.`);
+      }
+      parts.push('');
     }
-    parts.push('');
-    parts.push('If this looks right, an agent can proceed with the appropriate next step.');
+
+    parts.push(customerClosing(input.category, input.window ?? null, input.body));
 
     return {
-      text: parts.join('\n'),
+      text: parts.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
       citations,
       sufficient: true,
     };
@@ -78,5 +86,47 @@ export class MockProvider implements LLMProvider {
       kind: finding.kind,
       reason: finding.safe ? 'No adversarial pattern detected.' : guardrailResultString(finding),
     };
+  }
+}
+
+/** A warm, customer-facing closing tailored to the request — never agent-facing meta. */
+function customerClosing(
+  category: string | null | undefined,
+  window: { within: boolean } | null,
+  bodyText?: string,
+): string {
+  const textLower = (bodyText ?? '').toLowerCase();
+  const hasCustomerAgreement =
+    textLower.includes('ok with') ||
+    textLower.includes('replacement') ||
+    textLower.includes('yes') ||
+    textLower.includes('confirm') ||
+    textLower.includes('proceed') ||
+    textLower.includes('please send');
+
+  const outsideWindow = window ? !window.within : false;
+
+  if (hasCustomerAgreement && !outsideWindow) {
+    if (category === 'warranty' || textLower.includes('replacement')) {
+      return 'Thank you for confirming! I have noted your request for a replacement under warranty and our team will get it processed for you right away.';
+    }
+    if (category === 'refund') {
+      return 'Thank you for confirming! I will initiate the refund review for your order right away.';
+    }
+  }
+
+  switch (category) {
+    case 'refund':
+      return outsideWindow
+        ? 'While this falls outside the standard refund window, I’d be glad to look into store credit or other options — just let me know how you’d like to proceed.'
+        : 'If you’d like to go ahead, I can start a refund review on this order for you. Just reply to confirm and I’ll take care of it.';
+    case 'warranty':
+      return 'If you’d like, I can arrange a replacement or repair under warranty. Let me know and I’ll get it started for you.';
+    case 'shipping':
+      return 'Please allow the timeframe noted above; if it still hasn’t arrived, reply here and I’ll open a claim right away.';
+    case 'billing':
+      return 'I’ll review the charge and make sure everything is correct — please let me know if anything still looks off.';
+    default:
+      return 'Please let me know if there’s anything else I can help with — I’m happy to assist.';
   }
 }

@@ -193,11 +193,19 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   if (res.status === 401 && retry && (await refresh())) {
     return request<T>(path, init, false);
   }
+  if (res.status === 401) {
+    clearTokens();
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
+  }
   if (!res.ok) {
     let message = res.statusText;
     try {
       const body = await res.json();
-      message = body.message ?? body.error ?? message;
+      const fieldErrors = body?.details?.fieldErrors as Record<string, string[]> | undefined;
+      const firstFieldError = fieldErrors ? Object.values(fieldErrors).flat()[0] : undefined;
+      message = body.message ?? firstFieldError ?? body.error ?? message;
     } catch {
       /* ignore */
     }
@@ -237,6 +245,11 @@ export const api = {
     clearTokens();
   },
   me: () => request<{ profile: AgentProfile }>('/auth/agent/me'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>('/auth/agent/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
 
   tickets: (params: Record<string, string> = {}) => {
     const qs = new URLSearchParams(params).toString();

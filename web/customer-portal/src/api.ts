@@ -116,11 +116,19 @@ async function request<T>(path: string, init: RequestInit = {}, retry = true): P
   if (res.status === 401 && retry && (await refresh())) {
     return request<T>(path, init, false);
   }
+  if (res.status === 401) {
+    clearTokens();
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
+      window.location.href = '/login';
+    }
+  }
   if (!res.ok) {
     let message = res.statusText;
     try {
       const body = await res.json();
-      message = body.message ?? body.error ?? message;
+      const fieldErrors = body?.details?.fieldErrors as Record<string, string[]> | undefined;
+      const firstFieldError = fieldErrors ? Object.values(fieldErrors).flat()[0] : undefined;
+      message = body.message ?? firstFieldError ?? body.error ?? message;
     } catch {
       /* ignore */
     }
@@ -157,6 +165,11 @@ export const api = {
     clearTokens();
   },
   me: () => request<{ profile: Profile }>('/auth/customer/me'),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>('/auth/customer/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   orders: () => request<{ orders: Order[] }>('/me/orders'),
   products: () => request<{ products: Product[] }>('/me/products'),
   createOrder: (payload: { sku: string; quantity: number }) =>
@@ -165,4 +178,11 @@ export const api = {
   ticket: (id: string) => request<{ ticket: Ticket; order: Order | null; replies: Reply[] }>(`/me/tickets/${id}`),
   createTicket: (payload: { subject: string; body: string; orderId?: string | null }) =>
     request<{ ticket: Ticket }>('/me/tickets', { method: 'POST', body: JSON.stringify(payload) }),
+  replyToTicket: (id: string, text: string) =>
+    request<{ reply: Reply }>(`/me/tickets/${id}/reply`, { method: 'POST', body: JSON.stringify({ text }) }),
+  patchTicket: (id: string, body: { status: string }) =>
+    request<{ ticket: Ticket; order: Order | null; replies: Reply[] }>(`/me/tickets/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
 };

@@ -53,7 +53,7 @@ export const orders = sqliteTable(
     itemName: text('item_name'),
     quantity: integer('quantity').notNull().default(1),
     amountCents: integer('amount_cents').notNull().default(0),
-    currency: text('currency').notNull().default('USD'),
+    currency: text('currency').notNull().default('INR'),
     deliveredAt: text('delivered_at'),
   },
   (t) => ({
@@ -297,7 +297,7 @@ export const products = sqliteTable('products', {
   description: text('description'),
   category: text('category'),
   priceCents: integer('price_cents').notNull().default(0),
-  currency: text('currency').notNull().default('USD'),
+  currency: text('currency').notNull().default('INR'),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
 });
 

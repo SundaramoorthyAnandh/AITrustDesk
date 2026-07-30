@@ -58,6 +58,38 @@ Live demo (this deployment):
 > First load after idle is slow (API cold start). Hit the API health URL once to wake it, then use
 > the portals.
 
+## Run with Docker
+
+The repo ships a `docker-compose.yml` and a Dockerfile per app (build context is the repo root so npm
+workspaces resolve). One command builds and runs all three:
+
+```bash
+docker compose up --build
+```
+
+| Service | Image | URL | Notes |
+| --- | --- | --- | --- |
+| `api` | `trustdesk-api` (Node 22, multi-stage) | http://localhost:4000 | seeds on boot, mock LLM, CORS for the portal ports |
+| `customer` | `trustdesk-customer` (nginx) | http://localhost:8080 | built with `VITE_API_URL=http://localhost:4000` |
+| `agent` | `trustdesk-agent` (nginx) | http://localhost:8081 | same |
+
+Stop with `docker compose down`.
+
+Build a single image directly (context must be the repo root):
+
+```bash
+docker build -f backend/Dockerfile -t trustdesk-api .
+docker build -f web/customer-portal/Dockerfile --build-arg VITE_API_URL=http://localhost:4000 -t trustdesk-customer .
+docker build -f web/agent-portal/Dockerfile   --build-arg VITE_API_URL=http://localhost:4000 -t trustdesk-agent .
+```
+
+Notes:
+- The **API image installs only the `backend` workspace**, and the **portal images install only their
+  own workspace**, so the frontends never pull in the native `better-sqlite3` build.
+- `VITE_API_URL` is baked at build time — point it at wherever the browser will reach the API. For a
+  non-local deploy, rebuild the portal images with the public API URL.
+- Data is ephemeral (container FS); the API reseeds on every start, same as the Render free tier.
+
 ## Notes / troubleshooting
 - **CORS:** allowed origins are `https://*.onrender.com` (set via `CORS_ORIGINS`). To lock down to the
   exact portal URLs, edit that env var on `trustdesk-api`.

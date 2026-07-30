@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { getDb } from '../db/client.js';
 import { tickets, customers, orders, drafts, toolCalls, traces, products } from '../db/schema.js';
@@ -81,7 +81,7 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
   app.get('/agent/tickets/:id/drafts', { preHandler: requireAgent }, async (req, reply) => {
     const { id } = req.params as { id: string };
     return reply.send({
-      drafts: db.select().from(drafts).where(eq(drafts.ticketId, id)).orderBy(desc(drafts.createdAt)).all(),
+      drafts: db.select().from(drafts).where(eq(drafts.ticketId, id)).orderBy(asc(drafts.createdAt)).all(),
     });
   });
   app.get('/agent/tickets/:id/actions', { preHandler: requireAgent }, async (req, reply) => {
@@ -161,20 +161,87 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ tickets: rows });
   });
 
-  // GET /me/tickets/:id — own ticket with order context + non-refused drafts (agent replies)
+  // GET /me/tickets/:id — own ticket with order context + non-refused drafts (agent replies & customer replies)
   app.get('/me/tickets/:id', { preHandler: requireCustomer }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const customerId = req.principal!.customerId!;
     const ctx = getTicketContext(id);
     if (!ctx || ctx.ticket.customerId !== customerId) return reply.code(404).send({ error: 'not_found' });
-    // Customers see only replies an agent has sent, never internal escalated/refused drafts.
-    const sentReplies = db
+    // Customers see agent replies ('sent') and their own follow-up replies ('customer_reply').
+    const replies = db
       .select()
       .from(drafts)
-      .where(and(eq(drafts.ticketId, id), eq(drafts.status, 'sent')))
-      .orderBy(desc(drafts.createdAt))
+      .where(and(eq(drafts.ticketId, id), inArray(drafts.status, ['sent', 'customer_reply'])))
+      .orderBy(asc(drafts.createdAt))
       .all();
-    return reply.send({ ticket: ctx.ticket, order: ctx.order, replies: sentReplies });
+    return reply.send({ ticket: ctx.ticket, order: ctx.order, replies });
+  });
+
+  // POST /me/tickets/:id/reply — customer sends a follow-up reply to an open ticket
+  const CustomerReplySchema = z.object({
+    text: z.string().min(1).max(4000),
+  });
+  app.post('/me/tickets/:id/reply', { preHandler: requireCustomer }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const customerId = req.principal!.customerId!;
+    const parsed = CustomerReplySchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'bad_request', details: parsed.error.flatten() });
+
+    const ticket = db.select().from(tickets).where(eq(tickets.id, id)).get();
+    if (!ticket || ticket.customerId !== customerId) return reply.code(404).send({ error: 'not_found' });
+    if (ticket.status === 'closed') {
+      return reply.code(400).send({ error: 'bad_request', message: 'Complaint is closed. No further replies can be added.' });
+    }
+
+    const now = new Date().toISOString();
+    const draftId = prefixedId('DFT');
+    db.insert(drafts)
+      .values({
+        id: draftId,
+        ticketId: id,
+        text: parsed.data.text,
+        citations: [],
+        status: 'customer_reply',
+        createdAt: now,
+      })
+      .run();
+
+    db.update(tickets)
+      .set({ status: 'awaiting_agent', updatedAt: now })
+      .where(eq(tickets.id, id))
+      .run();
+
+    const created = db.select().from(drafts).where(eq(drafts.id, draftId)).get();
+    return reply.code(201).send({ reply: created });
+  });
+
+  // PATCH /me/tickets/:id — customer closes or reopens their own complaint
+  const CustomerPatchSchema = z.object({
+    status: z.enum(['closed', 'open', 'awaiting_agent', 'resolved']),
+  });
+  app.patch('/me/tickets/:id', { preHandler: requireCustomer }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const customerId = req.principal!.customerId!;
+    const parsed = CustomerPatchSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'bad_request', details: parsed.error.flatten() });
+
+    const ticket = db.select().from(tickets).where(eq(tickets.id, id)).get();
+    if (!ticket || ticket.customerId !== customerId) return reply.code(404).send({ error: 'not_found' });
+
+    const now = new Date().toISOString();
+    db.update(tickets)
+      .set({ status: parsed.data.status, updatedAt: now })
+      .where(eq(tickets.id, id))
+      .run();
+
+    const ctx = getTicketContext(id);
+    const replies = db
+      .select()
+      .from(drafts)
+      .where(and(eq(drafts.ticketId, id), inArray(drafts.status, ['sent', 'customer_reply'])))
+      .orderBy(asc(drafts.createdAt))
+      .all();
+    return reply.send({ ticket: ctx!.ticket, order: ctx!.order, replies });
   });
 
   // GET /me/orders — the caller's orders (to attach to a complaint)

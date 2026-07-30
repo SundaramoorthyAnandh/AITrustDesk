@@ -22,3 +22,7 @@ backend/trustdesk.db*
 .idea/
 .vscode/
 customers-500000.csv
+
+# Recorded walkthrough videos
+recordings/
+.tmp-recordings/

@@ -7,6 +7,7 @@ import {
   getCustomerProfile,
   getAgentProfile,
   principalFromRefresh,
+  changePassword,
   AuthError,
 } from '../services/auth.service.js';
 import { issueTokens, consumeRefreshToken, revokeRefreshToken } from '../auth/tokens.js';
@@ -19,6 +20,10 @@ const RegisterSchema = z.object({
 });
 const LoginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(200) });
 const RefreshSchema = z.object({ refreshToken: z.string().min(10) });
+const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters').max(200),
+});
 
 function authErrorStatus(code: AuthError['code']): number {
   switch (code) {
@@ -67,6 +72,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ profile });
   });
 
+  // Change own password. Revokes all refresh tokens → other sessions sign out.
+  app.post('/auth/customer/password', { preHandler: requireCustomer }, async (req, reply) =>
+    changePasswordHandler(req.body, 'customer', req.principal!.accountId, reply),
+  );
+
   /* ───────── Agent (no self-registration) ───────── */
   app.post('/auth/agent/login', async (req, reply) => {
     const parsed = LoginSchema.safeParse(req.body);
@@ -87,6 +97,27 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!profile) return reply.code(404).send({ error: 'not_found' });
     return reply.send({ profile });
   });
+
+  app.post('/auth/agent/password', { preHandler: requireAgent }, async (req, reply) =>
+    changePasswordHandler(req.body, 'agent', req.principal!.accountId, reply),
+  );
+}
+
+async function changePasswordHandler(
+  body: unknown,
+  principalType: 'customer' | 'agent',
+  accountId: string,
+  reply: import('fastify').FastifyReply,
+) {
+  const parsed = ChangePasswordSchema.safeParse(body);
+  if (!parsed.success) return reply.code(400).send({ error: 'bad_request', details: parsed.error.flatten() });
+  try {
+    await changePassword({ principalType, accountId, ...parsed.data });
+    return reply.code(204).send();
+  } catch (err) {
+    if (err instanceof AuthError) return reply.code(authErrorStatus(err.code)).send({ error: err.code, message: err.message });
+    throw err;
+  }
 }
 
 async function refreshHandler(body: unknown, expected: 'customer' | 'agent', reply: import('fastify').FastifyReply) {

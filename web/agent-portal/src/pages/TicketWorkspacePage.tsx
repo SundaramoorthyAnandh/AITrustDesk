@@ -9,10 +9,13 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Collapse,
   Divider,
+  IconButton,
   Link,
   MenuItem,
   Stack,
+  TablePagination,
   TextField,
   Tooltip,
   Typography,
@@ -23,6 +26,8 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import SearchIcon from '@mui/icons-material/Search';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import SendIcon from '@mui/icons-material/Send';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import {
   api,
   pollJob,
@@ -35,7 +40,8 @@ import {
   type ToolCatalogEntry,
   type Trace,
 } from '../api';
-import { CategoryChip, DraftStatusChip, PriorityChip, StatusChip, formatDate, money } from '../ui';
+import { CategoryChip, CitationChip, DraftStatusChip, Mono, PriorityChip, StatusChip, formatDate, money } from '../ui';
+import { ValidatedTextField, validators, firstError, type Validator } from '../components/ValidatedTextField';
 
 interface TriageJobResult {
   triage: { category: string; priority: string; escalate: boolean; reason: string };
@@ -110,6 +116,12 @@ export function TicketWorkspacePage() {
       await refresh();
     });
 
+  const doPatchStatus = (status: string) =>
+    run('patch', async () => {
+      await api.patchTicket(id!, { status });
+      await refresh();
+    });
+
   if (error && !ctx) return <Alert severity="error">{error}</Alert>;
   if (!ctx)
     return (
@@ -119,7 +131,7 @@ export function TicketWorkspacePage() {
     );
 
   const { ticket, customer, order } = ctx;
-  const latestDraft = drafts[0] ?? null;
+  const latestDraft = drafts.length > 0 ? drafts[drafts.length - 1] : null;
 
   return (
     <Stack spacing={2}>
@@ -127,18 +139,34 @@ export function TicketWorkspacePage() {
         <Link component={RouterLink} to="/" underline="hover">
           Queue
         </Link>
-        <Typography color="text.primary">{ticket.id}</Typography>
+        <Typography color="text.primary" title={ticket.id}>
+          <Mono>{ticket.id.slice(0, 14)}…</Mono>
+        </Typography>
       </Breadcrumbs>
 
       {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
 
       <Stack direction="row" justifyContent="space-between" alignItems="center">
         <Typography variant="h5">{ticket.subject ?? '(no subject)'}</Typography>
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} alignItems="center">
           <CategoryChip category={ticket.category} />
           <PriorityChip priority={ticket.priority} />
           <StatusChip status={ticket.status} />
           {ticket.escalated && <Chip size="small" color="warning" icon={<GppMaybeIcon />} label="escalated" />}
+          {ticket.status === 'closed' ? (
+            <Button size="small" variant="outlined" color="primary" onClick={() => doPatchStatus('open')} disabled={busy === 'patch'}>
+              Reopen ticket
+            </Button>
+          ) : (
+            <Stack direction="row" spacing={1}>
+              <Button size="small" variant="outlined" color="success" onClick={() => doPatchStatus('resolved')} disabled={busy === 'patch'}>
+                Resolve
+              </Button>
+              <Button size="small" variant="outlined" color="error" onClick={() => doPatchStatus('closed')} disabled={busy === 'patch'}>
+                Close ticket
+              </Button>
+            </Stack>
+          )}
         </Stack>
       </Stack>
 
@@ -162,8 +190,8 @@ export function TicketWorkspacePage() {
                   </Tooltip>
                 )}
               </Stack>
-              <Typography variant="body2" color="text.secondary">
-                {customer.email} · {customer.id}
+              <Typography variant="body2" color="text.secondary" title={customer.id}>
+                {customer.email} · <Mono>{customer.id.slice(0, 14)}…</Mono>
               </Typography>
 
               <Divider sx={{ my: 1.5 }} />
@@ -171,8 +199,9 @@ export function TicketWorkspacePage() {
                 Order context
               </Typography>
               {order ? (
-                <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  {order.id} · {order.itemName} ({order.itemSku}) · {money(order.amountCents, order.currency)}
+                <Typography variant="body2" sx={{ mt: 0.5 }} title={order.id}>
+                  <Mono>{order.id.slice(0, 14)}…</Mono> · {order.itemName} (<Mono>{order.itemSku}</Mono>) ·{' '}
+                  {money(order.amountCents, order.currency)}
                   <br />
                   ordered {formatDate(order.orderDate)} · status {order.status}
                   {order.deliveredAt ? ` · delivered ${formatDate(order.deliveredAt)}` : ''}
@@ -188,9 +217,52 @@ export function TicketWorkspacePage() {
           <Card variant="outlined">
             <CardContent>
               <Typography variant="overline" color="text.secondary">
-                Customer message
+                Conversation History
               </Typography>
-              <Typography sx={{ whiteSpace: 'pre-wrap', mt: 1 }}>{ticket.body}</Typography>
+              <Stack spacing={1.5} sx={{ mt: 1 }}>
+                <Box sx={{ p: 1.5, borderRadius: 1.5, bgcolor: 'background.default', border: '1px solid', borderColor: 'divider' }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
+                    <Typography variant="caption" fontWeight={700} color="primary">
+                      Customer (Initial message)
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDate(ticket.createdAt)}
+                    </Typography>
+                  </Stack>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{ticket.body}</Typography>
+                </Box>
+
+                {[...drafts]
+                  .filter((d) => d.status === 'sent' || d.status === 'customer_reply')
+                  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                  .map((d) => {
+                    const isCustomer = d.status === 'customer_reply';
+                    return (
+                      <Box
+                        key={d.id}
+                        sx={{
+                          p: 1.5,
+                          borderRadius: 1.5,
+                          bgcolor: isCustomer ? 'background.default' : 'action.hover',
+                          border: '1px solid',
+                          borderColor: isCustomer ? 'divider' : 'primary.light',
+                          ml: isCustomer ? 0 : 2,
+                          mr: isCustomer ? 2 : 0,
+                        }}
+                      >
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
+                          <Typography variant="caption" fontWeight={700} color={isCustomer ? 'primary' : 'secondary'}>
+                            {isCustomer ? 'Customer (Reply)' : 'Support Agent (Sent reply)'}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {formatDate(d.createdAt)}
+                          </Typography>
+                        </Stack>
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{d.text}</Typography>
+                      </Box>
+                    );
+                  })}
+              </Stack>
             </CardContent>
           </Card>
 
@@ -270,7 +342,7 @@ function RetrievalCard({ hits, busy, onSearch }: { hits: SearchHit[] | null; bus
             {hits.map((h) => (
               <Box key={h.docId}>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Chip size="small" label={h.docId} variant="outlined" />
+                  <CitationChip id={h.docId} />
                   <Typography variant="caption" color="text.secondary">
                     score {h.score}
                   </Typography>
@@ -344,13 +416,13 @@ function DraftCard({
               {draft.editedAt && <Chip size="small" variant="outlined" label="edited by agent" />}
             </Stack>
             {draft.status === 'refused' && (
-              <Alert severity="error" sx={{ mb: 1 }}>
-                Guardrail refused this request — nothing was sent.
+              <Alert severity="error" sx={{ mb: 1.5 }}>
+                Guardrail blocked / refused — reason: {draft.text}
               </Alert>
             )}
             {draft.status === 'escalated' && (
-              <Alert severity="warning" sx={{ mb: 1 }}>
-                Escalated to a human — no grounded policy fully supported an answer.
+              <Alert severity="warning" sx={{ mb: 1.5 }}>
+                Guardrail blocked or escalated to human review — reason: {draft.text}
               </Alert>
             )}
 
@@ -377,12 +449,12 @@ function DraftCard({
                   Citations:
                 </Typography>
                 {draft.citations.map((c) => (
-                  <Chip key={c} label={c} size="small" color="primary" variant="outlined" />
+                  <CitationChip key={c} id={c} />
                 ))}
               </Stack>
             )}
 
-            {draft.status === 'draft' && (
+            {draft.status !== 'sent' && (
               <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
                 {isEditing ? (
                   <>
@@ -401,7 +473,7 @@ function DraftCard({
                     <Button
                       size="small"
                       variant="contained"
-                      color="success"
+                      color="primary"
                       startIcon={<SendIcon />}
                       disabled={sending}
                       onClick={() => onSend(draft.id)}
@@ -427,6 +499,12 @@ function DraftCard({
 const TOOL_FIELDS: Record<string, string[]> = {
   start_refund_review: ['order_id', 'amount_cents', 'reason'],
   create_replacement_order: ['order_id', 'sku', 'reason'],
+};
+
+// Validation for the editable action fields (order_id/sku are read-only from the ticket).
+const FIELD_RULES: Record<string, Validator[]> = {
+  amount_cents: [validators.integerMin(0, 'Enter a whole number ≥ 0')],
+  reason: [validators.required('A reason is required')],
 };
 
 function ActionCard({
@@ -462,6 +540,9 @@ function ActionCard({
   // order_id (and the replacement sku) come from the ticket's linked order, so
   // they're pre-filled and read-only — the agent never hand-types an identifier.
   const orderMissing = !ticket.orderId;
+
+  const isReadOnly = (f: string) => f === 'order_id' || (f === 'sku' && Boolean(order?.itemSku));
+  const argsValid = fields.every((f) => isReadOnly(f) || !firstError(args[f] ?? '', FIELD_RULES[f] ?? []));
 
   const recommend = async () => {
     setError(null);
@@ -510,27 +591,29 @@ function ActionCard({
             </Alert>
           )}
 
-          {fields.map((f) => {
-            const readOnly = f === 'order_id' || (f === 'sku' && Boolean(order?.itemSku));
-            return (
+          {fields.map((f) =>
+            isReadOnly(f) ? (
               <TextField
                 key={f}
                 label={f}
                 size="small"
                 value={args[f] ?? ''}
-                onChange={readOnly ? undefined : (e) => setArgs((prev) => ({ ...prev, [f]: e.target.value }))}
-                InputProps={{ readOnly }}
-                helperText={
-                  readOnly
-                    ? "From the ticket’s order (read-only)"
-                    : f === 'amount_cents'
-                      ? 'Editable — e.g. for a partial refund'
-                      : undefined
-                }
+                InputProps={{ readOnly: true }}
+                helperText="From the ticket’s order (read-only)"
               />
-            );
-          })}
-          <Button variant="outlined" onClick={recommend} disabled={busy != null || orderMissing}>
+            ) : (
+              <ValidatedTextField
+                key={f}
+                label={f}
+                size="small"
+                value={args[f] ?? ''}
+                onChange={(v) => setArgs((prev) => ({ ...prev, [f]: v }))}
+                rules={FIELD_RULES[f] ?? []}
+                helperText={f === 'amount_cents' ? 'Editable — e.g. for a partial refund' : undefined}
+              />
+            ),
+          )}
+          <Button variant="outlined" onClick={recommend} disabled={busy != null || orderMissing || !argsValid}>
             Recommend action
           </Button>
         </Stack>
@@ -557,10 +640,10 @@ function ActionCard({
                     />
                   </Stack>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    {JSON.stringify(a.args)}
+                    <Mono>{JSON.stringify(a.args)}</Mono>
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    idempotency: {a.idempotencyKey.slice(0, 12)}…
+                    idempotency: <Mono>{a.idempotencyKey.slice(0, 12)}…</Mono>
                   </Typography>
                   {a.result && (
                     <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'success.main' }}>
@@ -588,32 +671,87 @@ function ActionCard({
 }
 
 function TracesCard({ traces }: { traces: Trace[] }) {
+  const [expanded, setExpanded] = useState(true);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
+
   if (traces.length === 0) return null;
+
+  const handleChangePage = (_: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const paginatedTraces = traces.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
   return (
     <Card variant="outlined">
-      <CardContent>
-        <Typography variant="subtitle1" fontWeight={700}>
-          Audit trace ({traces.length})
-        </Typography>
-        <Stack spacing={0.5} sx={{ mt: 1 }}>
-          {traces.map((t) => (
-            <Stack key={t.id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Chip size="small" label={t.runType} variant="outlined" />
-              <Typography variant="caption">status={t.finalStatus}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                guardrail={t.guardrailResult ?? '—'}
-              </Typography>
-              {t.retrievedDocIds.length > 0 && (
-                <Typography variant="caption" color="text.secondary">
-                  docs=[{t.retrievedDocIds.join(', ')}]
-                </Typography>
-              )}
-              <Typography variant="caption" color="text.secondary">
-                {t.provider ?? ''} {t.latencyMs != null ? `${t.latencyMs}ms` : ''} · {formatDate(t.createdAt)}
-              </Typography>
-            </Stack>
-          ))}
+      <CardContent sx={{ pb: expanded ? 2 : '16px !important' }}>
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          alignItems="center"
+          sx={{ cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <Typography variant="subtitle1" fontWeight={700}>
+            Audit trace ({traces.length})
+          </Typography>
+          <IconButton size="small" aria-label="toggle audit trace section">
+            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          </IconButton>
         </Stack>
+
+        <Collapse in={expanded} timeout="auto" unmountOnExit>
+          <Divider sx={{ my: 1.5 }} />
+          <Stack spacing={1}>
+            {paginatedTraces.map((t) => (
+              <Box
+                key={t.id}
+                sx={{
+                  p: 1.25,
+                  borderRadius: 1,
+                  bgcolor: 'background.default',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Chip size="small" label={t.runType} variant="outlined" color="primary" />
+                  <Typography variant="caption" fontWeight={600}>
+                    status={t.finalStatus}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    guardrail={t.guardrailResult ?? '—'}
+                  </Typography>
+                  {t.retrievedDocIds.length > 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                      docs=[<Mono>{t.retrievedDocIds.join(', ')}</Mono>]
+                    </Typography>
+                  )}
+                  <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                    {t.provider ?? ''} {t.latencyMs != null ? `${t.latencyMs}ms` : ''} · {formatDate(t.createdAt)}
+                  </Typography>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+
+          <TablePagination
+            component="div"
+            count={traces.length}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[5, 10, 25]}
+            sx={{ borderTop: 'none', mt: 1, px: 0 }}
+          />
+        </Collapse>
       </CardContent>
     </Card>
   );

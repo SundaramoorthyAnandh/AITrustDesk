@@ -23,7 +23,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api
       .me()
       .then((r) => setProfile(r.profile))
-      .catch(() => clearTokens())
+      .catch(() => {
+        clearTokens();
+        setProfile(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
