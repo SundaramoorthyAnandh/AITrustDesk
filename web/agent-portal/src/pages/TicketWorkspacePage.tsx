@@ -175,7 +175,7 @@ export function TicketWorkspacePage() {
 
       {readOnly && (
         <Alert severity="info">
-          This ticket is {ticket.status}. It’s read-only.
+          This ticket is {ticket.status}. Reopen to reply.
         </Alert>
       )}
 
@@ -542,7 +542,7 @@ function ConversationPanel({
           </Stack>
           {readOnly ? (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-              Ticket is {ticket.status} — reopen it to reply.
+              * Ticket is {ticket.status} — reopen it to reply.
             </Typography>
           ) : (
             !sendable && (
@@ -691,7 +691,7 @@ function ActionCard({
     <Card variant="outlined">
       <CardContent>
         <Typography variant="subtitle1" fontWeight={700}>
-          Sensitive action (human approval required)
+          Human Approval
         </Typography>
 
         <Stack spacing={1.5} sx={{ mt: 1.5 }}>
@@ -719,6 +719,7 @@ function ActionCard({
                 size="small"
                 value={args[f] ?? ''}
                 InputProps={{ readOnly: true }}
+                disabled
                 helperText="From the ticket’s order (read-only)"
               />
             ) : (
