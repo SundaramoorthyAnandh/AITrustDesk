@@ -14,7 +14,7 @@ import {
  *    are stored VERBATIM — evals match on strings like `KB-REFUND-001`.
  *  - System-generated rows use UUID TEXT PKs (crypto.randomUUID via newId()).
  *  - Timestamps are ISO-8601 TEXT (UTC). The time rule compares ticket.created_at
- *    and order.order_date — never Date.now() (see domain/time.ts).
+ *    and order.purchase_date — never Date.now() (see domain/time.ts).
  *  - JSON columns use text({mode:'json'}) so the DB stays portable to Postgres.
  *  - AUTH IS SPLIT: customers and agents authenticate against physically separate
  *    tables (customer_accounts / agent_accounts) with independent credentials,
@@ -47,7 +47,13 @@ export const orders = sqliteTable(
     customerId: text('customer_id')
       .notNull()
       .references(() => customers.id),
-    orderDate: text('order_date').notNull(), // ISO date — anchor for the time rule
+    // When the product was PURCHASED — the anchor for every time-window rule
+    // (return / refund / warranty). Never Date.now(). See domain/time.ts.
+    purchaseDate: text('purchase_date').notNull(),
+    // When the customer REGISTERED the product with TrustDesk. Informational /
+    // audit only — distinct from the purchase date and never drives eligibility.
+    // Nullable so pre-existing rows migrate cleanly (backfilled to purchase_date).
+    registeredAt: text('registered_at'),
     status: text('status').notNull(), // placed | shipped | delivered | cancelled | returned
     itemSku: text('item_sku'),
     itemName: text('item_name'),

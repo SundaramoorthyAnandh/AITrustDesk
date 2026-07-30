@@ -41,7 +41,10 @@ interface RawCustomer {
 interface RawOrder {
   id: string;
   customer_id: string;
+  /** When the product was purchased — the time-window anchor. */
   order_date: string;
+  /** When it was registered with TrustDesk. Optional; defaults to order_date. */
+  registered_at?: string | null;
   status: string;
   item_sku?: string;
   item_name?: string;
@@ -125,7 +128,8 @@ export function loadAll(nowIso = new Date().toISOString()): { counts: Record<str
       .values({
         id: seedId(o.id),
         customerId: seedId(o.customer_id),
-        orderDate: o.order_date,
+        purchaseDate: o.order_date,
+        registeredAt: o.registered_at ?? o.order_date,
         status: o.status,
         itemSku: o.item_sku ?? null,
         itemName: o.item_name ?? null,
@@ -137,6 +141,8 @@ export function loadAll(nowIso = new Date().toISOString()): { counts: Record<str
       .onConflictDoUpdate({
         target: orders.id,
         set: {
+          purchaseDate: o.order_date,
+          registeredAt: o.registered_at ?? o.order_date,
           status: o.status,
           deliveredAt: o.delivered_at ?? null,
           amountCents: o.amount_cents ?? 0,

@@ -15,11 +15,18 @@ import {
 import { api, type Product } from '../api';
 import { money, Mono } from '../ui';
 
+// Local YYYY-MM-DD (for the date input's max + default), avoiding UTC drift.
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export function NewOrderPage() {
   const navigate = useNavigate();
   const [productList, setProductList] = useState<Product[]>([]);
   const [sku, setSku] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [purchaseDate, setPurchaseDate] = useState(todayISO());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -36,16 +43,21 @@ export function NewOrderPage() {
   const selected = useMemo(() => productList.find((p) => p.sku === sku) ?? null, [productList, sku]);
   const total = selected ? selected.priceCents * quantity : 0;
 
+  const today = todayISO();
+  const purchaseDateError =
+    !purchaseDate ? 'Purchase date is required' : purchaseDate > today ? 'Purchase date cannot be in the future' : null;
+  const formValid = !!sku && !purchaseDateError;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sku) return;
+    if (!formValid) return;
     setBusy(true);
     setError(null);
     try {
-      await api.createOrder({ sku, quantity });
+      await api.createOrder({ sku, quantity, purchaseDate });
       navigate('/orders');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to place order');
+      setError(err instanceof Error ? err.message : 'Failed to register product');
     } finally {
       setBusy(false);
     }
@@ -76,14 +88,33 @@ export function NewOrderPage() {
                 ))}
               </TextField>
 
-              <TextField
-                label="Quantity"
-                type="number"
-                value={quantity}
-                onChange={(e) => setQuantity(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
-                inputProps={{ min: 1, max: 20 }}
-                sx={{ width: 160 }}
-              />
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                <TextField
+                  label="Quantity"
+                  type="number"
+                  value={quantity}
+                  onChange={(e) => setQuantity(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+                  inputProps={{ min: 1, max: 20 }}
+                  sx={{ width: 160 }}
+                />
+
+                <TextField
+                  label="Purchase date"
+                  type="date"
+                  value={purchaseDate}
+                  onChange={(e) => setPurchaseDate(e.target.value)}
+                  required
+                  error={!!purchaseDateError}
+                  helperText={purchaseDateError ?? 'When you bought it — sets your return & warranty windows'}
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ max: today }}
+                  sx={{ flex: 1 }}
+                />
+              </Stack>
+
+              <Typography variant="caption" color="text.secondary">
+                Registration date is recorded automatically as today ({today}), separately from your purchase date.
+              </Typography>
 
               {selected && (
                 <>
@@ -97,8 +128,8 @@ export function NewOrderPage() {
 
               <Stack direction="row" spacing={2} justifyContent="flex-end">
                 <Button onClick={() => navigate('/orders')}>Cancel</Button>
-                <Button type="submit" variant="contained" disabled={busy || !sku}>
-                  Place order
+                <Button type="submit" variant="contained" disabled={busy || !formValid}>
+                  Register product
                 </Button>
               </Stack>
             </Stack>

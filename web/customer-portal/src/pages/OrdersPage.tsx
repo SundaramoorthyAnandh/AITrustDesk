@@ -69,7 +69,8 @@ export function OrdersPage() {
                 <TableCell align="right" sx={SM_UP}>Qty</TableCell>
                 <TableCell align="right">Total</TableCell>
                 <TableCell sx={SM_UP}>Status</TableCell>
-                <TableCell sx={LG_UP}>Ordered</TableCell>
+                <TableCell sx={MD_UP}>Purchased</TableCell>
+                <TableCell sx={LG_UP}>Registered</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -89,9 +90,10 @@ export function OrdersPage() {
                     <Typography
                       variant="caption"
                       color="text.secondary"
-                      sx={{ display: { xs: 'block', sm: 'none' }, mt: 0.5 }}
+                      sx={{ display: { xs: 'block', md: 'none' }, mt: 0.5 }}
                     >
-                      Qty {o.quantity} · {o.status} · {formatDate(o.orderDate)}
+                      Qty {o.quantity} · {o.status} · purchased {formatDate(o.purchaseDate)}
+                      {o.registeredAt ? ` · registered ${formatDate(o.registeredAt)}` : ''}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={SM_UP}>
@@ -101,9 +103,14 @@ export function OrdersPage() {
                     {money(o.amountCents, o.currency)}
                   </TableCell>
                   <TableCell sx={SM_UP}>{o.status}</TableCell>
+                  <TableCell sx={MD_UP}>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {formatDate(o.purchaseDate)}
+                    </Typography>
+                  </TableCell>
                   <TableCell sx={LG_UP}>
                     <Typography variant="caption" color="text.secondary" noWrap>
-                      {formatDate(o.orderDate)}
+                      {o.registeredAt ? formatDate(o.registeredAt) : '—'}
                     </Typography>
                   </TableCell>
                 </TableRow>

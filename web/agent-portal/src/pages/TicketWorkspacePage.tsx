@@ -203,7 +203,8 @@ export function TicketWorkspacePage() {
                   <Mono>{order.id.slice(0, 14)}…</Mono> · {order.itemName} (<Mono>{order.itemSku}</Mono>) ·{' '}
                   {money(order.amountCents, order.currency)}
                   <br />
-                  ordered {formatDate(order.orderDate)} · status {order.status}
+                  purchased {formatDate(order.purchaseDate)}
+                  {order.registeredAt ? ` · registered ${formatDate(order.registeredAt)}` : ''} · status {order.status}
                   {order.deliveredAt ? ` · delivered ${formatDate(order.deliveredAt)}` : ''}
                 </Typography>
               ) : (

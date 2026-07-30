@@ -109,7 +109,7 @@ export async function runEval(provider: LLMProvider = getProvider()): Promise<Ev
         subject: c.input.subject ?? null,
         body: c.input.body,
         order: c.input.order
-          ? ({ id: 'EVAL', orderDate: c.input.order.order_date, status: c.input.order.status, itemName: c.input.order.item_name } as OrderContext)
+          ? ({ id: 'EVAL', purchaseDate: c.input.order.order_date, status: c.input.order.status, itemName: c.input.order.item_name } as OrderContext)
           : null,
         customer: null,
       });
@@ -130,7 +130,7 @@ export async function runEval(provider: LLMProvider = getProvider()): Promise<Ev
     const order: OrderContext | null = c.input.order
       ? {
           id: 'EVAL-ORDER',
-          orderDate: c.input.order.order_date,
+          purchaseDate: c.input.order.order_date,
           status: c.input.order.status,
           itemName: c.input.order.item_name,
           itemSku: c.input.order.sku,

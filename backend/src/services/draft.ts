@@ -109,7 +109,7 @@ export async function runDraftPipeline(
   const fullText = `${input.subject ?? ''}\n${input.body}`.trim();
   const guardrail = scanText(fullText);
   const category = input.categoryHint ?? classifyCategory(fullText);
-  const window = windowForTicket(category, input.order?.orderDate, input.ticketCreatedAt);
+  const window = windowForTicket(category, input.order?.purchaseDate, input.ticketCreatedAt);
 
   // Retrieval — bias toward the triaged policy family (see CATEGORY_QUERY_HINT).
   const query = `${fullText} ${CATEGORY_QUERY_HINT[category]}`.trim();
@@ -325,7 +325,8 @@ export async function runDraft(
       order: ctx.order
         ? {
             id: ctx.order.id,
-            orderDate: ctx.order.orderDate,
+            purchaseDate: ctx.order.purchaseDate,
+            registeredAt: ctx.order.registeredAt,
             status: ctx.order.status,
             itemName: ctx.order.itemName,
             itemSku: ctx.order.itemSku,

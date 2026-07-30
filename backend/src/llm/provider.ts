@@ -14,7 +14,8 @@ export interface RetrievedDoc {
 
 export interface OrderContext {
   id: string;
-  orderDate: string;
+  purchaseDate: string; // anchor for return/refund/warranty windows
+  registeredAt?: string | null; // when registered with TrustDesk (audit only)
   status: string;
   itemName?: string | null;
   itemSku?: string | null;

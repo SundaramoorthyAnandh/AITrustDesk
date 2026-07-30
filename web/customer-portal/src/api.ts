@@ -19,7 +19,8 @@ export interface Profile {
 }
 export interface Order {
   id: string;
-  orderDate: string;
+  purchaseDate: string; // when the product was bought (anchors return/warranty windows)
+  registeredAt: string | null; // when it was registered with TrustDesk
   status: string;
   itemName: string | null;
   itemSku: string | null;
@@ -172,7 +173,7 @@ export const api = {
     }),
   orders: () => request<{ orders: Order[] }>('/me/orders'),
   products: () => request<{ products: Product[] }>('/me/products'),
-  createOrder: (payload: { sku: string; quantity: number }) =>
+  createOrder: (payload: { sku: string; quantity: number; purchaseDate: string }) =>
     request<{ order: Order }>('/me/orders', { method: 'POST', body: JSON.stringify(payload) }),
   tickets: () => request<{ tickets: Ticket[] }>('/me/tickets'),
   ticket: (id: string) => request<{ ticket: Ticket; order: Order | null; replies: Reply[] }>(`/me/tickets/${id}`),

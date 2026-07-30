@@ -1,12 +1,13 @@
 /**
  * Time rule (build-prompt §1.4 — graded, unit-tested).
  *
- * Return / warranty / refund windows are evaluated against the ORDER date and the
- * TICKET's created_at — NEVER against the wall clock. Keeping this in one pure,
- * dependency-free helper means eval results are deterministic and reproducible.
+ * Return / warranty / refund windows are evaluated against the PURCHASE date and
+ * the TICKET's created_at — NEVER against the wall clock, and never against the
+ * product-registration date. Keeping this in one pure, dependency-free helper
+ * means eval results are deterministic and reproducible.
  *
  * A ticket is "within window" when it was opened no later than `windowDays`
- * after the order date (inclusive), and not before the order date.
+ * after the purchase date (inclusive), and not before the purchase date.
  */
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -20,26 +21,26 @@ function toEpochMs(iso: string, label: string): number {
   return ms;
 }
 
-/** Whole-day difference ticketCreatedAt - orderDate (can be negative). */
-export function daysBetween(orderDate: string, ticketCreatedAt: string): number {
-  const order = toEpochMs(orderDate, 'order');
+/** Whole-day difference ticketCreatedAt - purchaseDate (can be negative). */
+export function daysBetween(purchaseDate: string, ticketCreatedAt: string): number {
+  const purchase = toEpochMs(purchaseDate, 'purchase');
   const ticket = toEpochMs(ticketCreatedAt, 'ticket created_at');
-  return Math.floor((ticket - order) / MS_PER_DAY);
+  return Math.floor((ticket - purchase) / MS_PER_DAY);
 }
 
 /**
- * True iff the ticket was opened within [orderDate, orderDate + windowDays].
+ * True iff the ticket was opened within [purchaseDate, purchaseDate + windowDays].
  * Deterministic: depends only on its three arguments.
  */
 export function isWithinWindow(
-  orderDate: string,
+  purchaseDate: string,
   ticketCreatedAt: string,
   windowDays: number,
 ): boolean {
   if (!Number.isFinite(windowDays) || windowDays < 0) {
     throw new RangeError(`windowDays must be a non-negative number, got ${windowDays}`);
   }
-  const elapsed = daysBetween(orderDate, ticketCreatedAt);
+  const elapsed = daysBetween(purchaseDate, ticketCreatedAt);
   return elapsed >= 0 && elapsed <= windowDays;
 }
 
@@ -51,14 +52,14 @@ export interface WindowEvaluation {
 }
 
 export function evaluateWindow(
-  orderDate: string,
+  purchaseDate: string,
   ticketCreatedAt: string,
   windowDays: number,
 ): WindowEvaluation {
-  const elapsedDays = daysBetween(orderDate, ticketCreatedAt);
+  const elapsedDays = daysBetween(purchaseDate, ticketCreatedAt);
   return {
     windowDays,
     elapsedDays,
-    within: isWithinWindow(orderDate, ticketCreatedAt, windowDays),
+    within: isWithinWindow(purchaseDate, ticketCreatedAt, windowDays),
   };
 }

@@ -206,7 +206,8 @@ function executeEffect(
       .values({
         id: replacementId,
         customerId: original.customerId,
-        orderDate: now,
+        purchaseDate: now, // replacement is issued now — anchors its own windows
+        registeredAt: now,
         status: 'placed',
         itemSku: sku,
         itemName: original.itemName,

@@ -50,11 +50,11 @@ export class MockProvider implements LLMProvider {
     if (input.window && alreadySentSet.size === 0) {
       if (input.window.within) {
         parts.push(
-          `Your order (placed ${input.order?.orderDate?.slice(0, 10)}) is within the applicable ${input.window.windowDays}-day window (${input.window.elapsedDays} days elapsed), so it is eligible.`,
+          `Your product (purchased ${input.order?.purchaseDate?.slice(0, 10)}) is within the applicable ${input.window.windowDays}-day window (${input.window.elapsedDays} days elapsed), so it is eligible.`,
         );
       } else {
         parts.push(
-          `Your order (placed ${input.order?.orderDate?.slice(0, 10)}) falls outside the ${input.window.windowDays}-day window (${input.window.elapsedDays} days elapsed), so it does not qualify under that policy; I can look into alternatives such as store credit.`,
+          `Your product (purchased ${input.order?.purchaseDate?.slice(0, 10)}) falls outside the ${input.window.windowDays}-day window (${input.window.elapsedDays} days elapsed), so it does not qualify under that policy; I can look into alternatives such as store credit.`,
         );
       }
       parts.push('');

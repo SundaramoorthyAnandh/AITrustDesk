@@ -248,7 +248,7 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
   app.get('/me/orders', { preHandler: requireCustomer }, async (req, reply) => {
     const customerId = req.principal!.customerId!;
     return reply.send({
-      orders: db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.orderDate)).all(),
+      orders: db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.purchaseDate)).all(),
     });
   });
 
@@ -259,10 +259,18 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  // POST /me/orders — place a new order for the authenticated customer
+  // POST /me/orders — register a product the customer already purchased.
+  // purchaseDate is customer-supplied (when they bought it) and anchors the
+  // return/refund/warranty windows; registeredAt is server-stamped to "now".
   const CreateOrderSchema = z.object({
     sku: z.string().min(1),
     quantity: z.number().int().min(1).max(20).default(1),
+    // ISO date (YYYY-MM-DD) or full ISO datetime; must not be in the future.
+    purchaseDate: z
+      .string()
+      .min(1)
+      .refine((v) => !Number.isNaN(Date.parse(v)), { message: 'Invalid purchase date' })
+      .refine((v) => Date.parse(v) <= Date.now(), { message: 'Purchase date cannot be in the future' }),
   });
   app.post('/me/orders', { preHandler: requireCustomer }, async (req, reply) => {
     const parsed = CreateOrderSchema.safeParse(req.body);
@@ -275,12 +283,15 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const now = new Date().toISOString();
+    // Normalise a bare date (YYYY-MM-DD) to an ISO instant so window math is stable.
+    const purchaseDate = new Date(parsed.data.purchaseDate).toISOString();
     const id = prefixedId('ORD');
     db.insert(orders)
       .values({
         id,
         customerId,
-        orderDate: now, // "placed now" — anchors refund/warranty windows from today
+        purchaseDate, // when the product was bought — anchors the time-window rules
+        registeredAt: now, // when it was registered with TrustDesk (audit only)
         status: 'placed',
         itemSku: product.sku,
         itemName: product.name,
