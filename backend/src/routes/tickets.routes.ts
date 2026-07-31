@@ -10,6 +10,15 @@ import { prefixedId } from '../lib/ids.js';
 function ticketContextDTO(ticketId: string) {
   const ctx = getTicketContext(ticketId);
   if (!ctx) return null;
+  // Enrich the order with its product's refund eligibility so the agent UI can
+  // gate the "start refund review" action (KB-REFUND-002). Defaults to true when
+  // the SKU is unknown — the server-side action guard is the real enforcement.
+  let order = ctx.order as (typeof ctx.order & { refundable?: boolean }) | null;
+  if (order?.itemSku) {
+    const db = getDb();
+    const product = db.select().from(products).where(eq(products.sku, order.itemSku)).get();
+    order = { ...order, refundable: product ? product.refundable : true };
+  }
   return {
     ticket: ctx.ticket,
     customer: {
@@ -19,7 +28,7 @@ function ticketContextDTO(ticketId: string) {
       identityVerified: ctx.customer.identityVerified,
       emailVerified: ctx.customer.emailVerified,
     },
-    order: ctx.order,
+    order,
   };
 }
 
@@ -189,6 +198,9 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
 
     const ticket = db.select().from(tickets).where(eq(tickets.id, id)).get();
     if (!ticket || ticket.customerId !== customerId) return reply.code(404).send({ error: 'not_found' });
+    // 'closed' is terminal — the customer explicitly closed it, so no more replies.
+    // A 'resolved' ticket (agent/AI marked it done) is NOT terminal for the
+    // customer: they can still reply, and doing so reopens it (below).
     if (ticket.status === 'closed') {
       return reply.code(400).send({ error: 'bad_request', message: 'Complaint is closed. No further replies can be added.' });
     }
@@ -206,6 +218,9 @@ export async function ticketRoutes(app: FastifyInstance): Promise<void> {
       })
       .run();
 
+    // Any customer reply moves the ticket to 'awaiting_agent'. For a resolved
+    // ticket this is an automatic reopen: 'awaiting_agent' is not read-only, so
+    // the agent console unlocks and the ticket re-enters the active queue.
     db.update(tickets)
       .set({ status: 'awaiting_agent', updatedAt: now })
       .where(eq(tickets.id, id))

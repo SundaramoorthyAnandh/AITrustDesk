@@ -1,6 +1,6 @@
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
-import { toolCalls, approvals, orders, tickets, type ToolCall } from '../db/schema.js';
+import { toolCalls, approvals, orders, tickets, products, drafts, type ToolCall } from '../db/schema.js';
 import { newId, sha256 } from '../lib/ids.js';
 import { writeTrace } from './traces.js';
 
@@ -55,6 +55,21 @@ export function recommendAction(params: {
     }
     // Normalise to the ticket's order so a missing/blank order_id can't slip through.
     params.args = { ...params.args, order_id: ticket.orderId };
+
+    // Policy gate (KB-REFUND-002): a refund can't be started for a non-refundable
+    // item (gift cards / digital / final-sale). Block by policy — the product's
+    // `refundable` flag is the source of truth, checked here before we even stage it.
+    if (params.toolName === 'start_refund_review') {
+      const order = db.select().from(orders).where(eq(orders.id, ticket.orderId)).get();
+      const sku = order?.itemSku ?? '';
+      const product = sku ? db.select().from(products).where(eq(products.sku, sku)).get() : undefined;
+      if (product && !product.refundable) {
+        throw new ActionError(
+          `This item is non-refundable per policy (KB-REFUND-002), so a refund review can't be started. Consider a replacement instead.`,
+          'conflict',
+        );
+      }
+    }
   }
 
   const existing = db
@@ -104,6 +119,27 @@ export function approveAction(params: {
     // Already executed → return cached result, no duplicate effect, no new approval row.
     if (tc.status === 'executed') return tc;
 
+    // One resolution per order, and refund XOR replacement. Idempotency stops the
+    // SAME action re-executing; this stops *any other* executed action — a second
+    // refund, a second replacement, OR the opposite remedy — on the same order.
+    // A given order can be refunded OR replaced, never both.
+    const orderId = String(tc.args.order_id ?? '');
+    if (orderId) {
+      const done = tx
+        .select({ id: toolCalls.id, toolName: toolCalls.toolName, args: toolCalls.args })
+        .from(toolCalls)
+        .where(eq(toolCalls.status, 'executed'))
+        .all()
+        .find((r) => r.id !== tc.id && String((r.args as Record<string, unknown>).order_id ?? '') === orderId);
+      if (done) {
+        const priorNoun = done.toolName === 'start_refund_review' ? 'refund' : 'replacement';
+        throw new ActionError(
+          `This order already has a completed ${priorNoun}; an order can be refunded or replaced, but not both.`,
+          'conflict',
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     tx.insert(approvals)
       .values({
@@ -129,6 +165,30 @@ export function approveAction(params: {
       .set({ status, result, updatedAt: now })
       .where(eq(toolCalls.id, tc.id))
       .run();
+
+    // On a successful execute: post a plain, customer-facing confirmation to the
+    // conversation (guardrailed — NO reviewId / order id / internal reason / amounts)
+    // and auto-resolve the ticket, since the action fulfils the request.
+    if (status === 'executed') {
+      const customerMessage =
+        tc.toolName === 'start_refund_review'
+          ? "Good news — we've approved a refund for your order. The amount will be returned to your original payment method, typically within 5–7 business days, and we'll email you once it's processed."
+          : "Good news — we've arranged a free replacement for your order at no additional cost. It will ship shortly and we'll email you the tracking details once it's on the way.";
+      tx.insert(drafts)
+        .values({
+          id: newId(),
+          ticketId: tc.ticketId,
+          text: customerMessage,
+          citations: [],
+          status: 'sent', // appears in the conversation as an outbound message to the customer
+          createdByAgentId: null, // system-posted confirmation
+          editedByAgentId: null,
+          editedAt: null,
+          createdAt: now,
+        })
+        .run();
+      tx.update(tickets).set({ status: 'resolved', updatedAt: now }).where(eq(tickets.id, tc.ticketId)).run();
+    }
 
     writeTrace({
       ticketId: tc.ticketId,

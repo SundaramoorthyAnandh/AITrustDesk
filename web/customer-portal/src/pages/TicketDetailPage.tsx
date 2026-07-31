@@ -76,7 +76,10 @@ export function TicketDetailPage() {
     );
 
   const { ticket, order, replies } = data;
+  // 'closed' is terminal (the customer closed it). 'resolved' means our team/AI
+  // considers it done — but the customer can still reply, and replying reopens it.
   const isClosed = ticket.status === 'closed';
+  const isResolved = ticket.status === 'resolved';
 
   return (
     <Stack spacing={3}>
@@ -206,8 +209,14 @@ export function TicketDetailPage() {
       ) : (
         <Card variant="outlined" sx={{ mt: 2 }}>
           <CardContent sx={{ p: 2.5 }}>
+            {isResolved && (
+              <Alert severity="success" sx={{ mb: 2 }}>
+                Our team marked this complaint as <strong>resolved</strong>. If your issue isn’t fully solved, just
+                reply below — your message will automatically reopen the complaint.
+              </Alert>
+            )}
             <Typography variant="subtitle2" mb={1.5} fontWeight={600}>
-              Send a reply
+              {isResolved ? 'Not fully resolved? Reply to reopen' : 'Send a reply'}
             </Typography>
             {replyError && <Alert severity="error" sx={{ mb: 2 }}>{replyError}</Alert>}
             <form onSubmit={handleSendReply}>

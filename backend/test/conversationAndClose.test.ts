@@ -96,6 +96,41 @@ describe('Multi-turn Customer Conversation & Ticket Closing', () => {
     expect(replyRes.json().message).toContain('closed');
   });
 
+  it('treats a resolved ticket as read-only for the agent, but a customer reply reopens it', async () => {
+    const ticketId = seedId('TCK-9009');
+
+    // Ensure a clean, active starting point, then the agent marks it resolved.
+    await app.inject({ method: 'PATCH', url: `/me/tickets/${ticketId}`, headers: custAuth(), payload: { status: 'open' } });
+    const resolveRes = await app.inject({
+      method: 'PATCH',
+      url: `/agent/tickets/${ticketId}`,
+      headers: agtAuth(),
+      payload: { status: 'resolved' },
+    });
+    expect(resolveRes.statusCode).toBe(200);
+    expect(resolveRes.json().ticket.status).toBe('resolved');
+
+    // Resolved is read-only for the agent — a mutating action is rejected with 409.
+    const triageRes = await app.inject({ method: 'POST', url: `/agent/tickets/${ticketId}/triage`, headers: agtAuth() });
+    expect(triageRes.statusCode).toBe(409);
+    expect(triageRes.json().error).toBe('ticket_read_only');
+
+    // The customer can STILL reply to a resolved ticket, and doing so reopens it.
+    const replyRes = await app.inject({
+      method: 'POST',
+      url: `/me/tickets/${ticketId}/reply`,
+      headers: custAuth(),
+      payload: { text: 'This did not actually fix my problem — please take another look.' },
+    });
+    expect(replyRes.statusCode).toBe(201);
+
+    // Reopened: status is now awaiting_agent (not read-only), so the agent unlocks.
+    const detailRes = await app.inject({ method: 'GET', url: `/me/tickets/${ticketId}`, headers: custAuth() });
+    expect(detailRes.json().ticket.status).toBe('awaiting_agent');
+    const triageAfter = await app.inject({ method: 'POST', url: `/agent/tickets/${ticketId}/triage`, headers: agtAuth() });
+    expect(triageAfter.statusCode).not.toBe(409);
+  });
+
   it('allows customer to close and reopen their own complaint', async () => {
     const ticketId = seedId('TCK-9009');
 

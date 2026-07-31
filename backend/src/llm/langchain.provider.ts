@@ -32,26 +32,35 @@ import { env } from '../config/env.js';
  */
 export class LangChainProvider implements LLMProvider {
   readonly name = 'langchain' as const;
+  /** Draft generation — uses the configured temperature (some creative latitude). */
   private readonly model: ChatOpenAI;
+  /**
+   * Classification (triage + guardrail) — temperature 0 so the same ticket always
+   * classifies the same way. Draft phrasing can vary; a category/verdict must not.
+   * This is what keeps triage & guardrails consistent run-to-run.
+   */
+  private readonly classifier: ChatOpenAI;
 
   constructor() {
-    this.model = new ChatOpenAI({
+    const common = {
       model: env.MODEL_NAME,
       apiKey: env.OPENAI_API_KEY,
-      temperature: env.LLM_TEMPERATURE,
       timeout: env.LLM_TIMEOUT_MS,
       maxRetries: 0, // we own the retry policy
       configuration: { baseURL: env.OPENAI_BASE_URL },
-    });
+    };
+    this.model = new ChatOpenAI({ ...common, temperature: env.LLM_TEMPERATURE });
+    this.classifier = new ChatOpenAI({ ...common, temperature: 0 });
   }
 
   private async callJson<S extends z.ZodTypeAny>(
     system: string,
     user: string,
     schema: S,
+    model: ChatOpenAI = this.model,
   ): Promise<z.infer<S>> {
     const attempt = async (extra?: string): Promise<z.infer<S>> => {
-      const res = await this.model.invoke([
+      const res = await model.invoke([
         { role: 'system', content: system },
         { role: 'user', content: extra ? `${user}\n\n${extra}` : user },
       ]);
@@ -70,7 +79,7 @@ export class LangChainProvider implements LLMProvider {
 
   async triage(input: TriageInput): Promise<TriageResult> {
     const { system, user } = buildTriagePrompt(input);
-    return this.callJson(system, user, TriageResultSchema);
+    return this.callJson(system, user, TriageResultSchema, this.classifier);
   }
 
   async draft(input: DraftInput): Promise<DraftLLMResult> {
@@ -87,7 +96,7 @@ export class LangChainProvider implements LLMProvider {
       return { safe: false, kind: deterministic.kind, reason: deterministic.reason };
     }
     try {
-      return await this.callJson(GUARDRAIL_SYSTEM, buildGuardrailPrompt(input.text), GuardrailResultSchema);
+      return await this.callJson(GUARDRAIL_SYSTEM, buildGuardrailPrompt(input.text), GuardrailResultSchema, this.classifier);
     } catch {
       return { safe: true, kind: 'none', reason: 'LLM guardrail unavailable; deterministic scan clean.' };
     }

@@ -619,6 +619,13 @@ const TOOL_FIELDS: Record<string, string[]> = {
   create_replacement_order: ['order_id', 'sku', 'reason'],
 };
 
+// Human-readable labels for the proposed/executed panel — we never surface raw
+// tool names or internal identifiers to the agent.
+const TOOL_LABELS: Record<string, string> = {
+  start_refund_review: 'Refund review',
+  create_replacement_order: 'Replacement order',
+};
+
 // Validation for the editable action fields (order_id/sku are read-only from the ticket).
 const FIELD_RULES: Record<string, Validator[]> = {
   amount_cents: [validators.integerMin(0, 'Enter a whole number ≥ 0')],
@@ -646,7 +653,13 @@ function ActionCard({
 }) {
   const [tool, setTool] = useState('start_refund_review');
   const [args, setArgs] = useState<Record<string, string>>({});
+  // Bumped whenever the base data resets or an action is staged, so the validated
+  // fields remount and clear their "touched" state — otherwise a just-cleared
+  // reason field would keep flashing a stale "reason is required" error.
+  const [formKey, setFormKey] = useState(0);
 
+  // Depend on stable primitives (not the `order` object identity): a refetch that
+  // returns the same order must NOT wipe a reason the agent is typing.
   useEffect(() => {
     setArgs({
       order_id: ticket.orderId ?? '',
@@ -654,15 +667,34 @@ function ActionCard({
       sku: order?.itemSku ?? '',
       reason: '',
     });
-  }, [ticket.orderId, order]);
+    setFormKey((k) => k + 1);
+  }, [ticket.orderId, order?.id, order?.amountCents, order?.itemSku]);
 
   const fields = TOOL_FIELDS[tool] ?? [];
   // order_id (and the replacement sku) come from the ticket's linked order, so
   // they're pre-filled and read-only — the agent never hand-types an identifier.
   const orderMissing = !ticket.orderId;
 
+  // An order can be refunded OR replaced — never both, and each at most once.
+  // If ANY action already executed for this ticket's order, both tools lock out
+  // (the server enforces this too; the UI just mirrors it).
+  const executedForOrder = actions.filter(
+    (a) => a.status === 'executed' && String((a.args as Record<string, unknown>).order_id ?? '') === (ticket.orderId ?? ''),
+  );
+  const orderResolved = executedForOrder.length > 0;
+  const resolvedRemedy: 'refund' | 'replacement' | null = orderResolved
+    ? executedForOrder[0].toolName === 'start_refund_review'
+      ? 'refund'
+      : 'replacement'
+    : null;
+
+  // Policy gate (KB-REFUND-002): non-refundable items can't be refunded.
+  const refundBlocked = tool === 'start_refund_review' && order?.refundable === false;
+
   const isReadOnly = (f: string) => f === 'order_id' || (f === 'sku' && Boolean(order?.itemSku));
   const argsValid = fields.every((f) => isReadOnly(f) || !firstError(args[f] ?? '', FIELD_RULES[f] ?? []));
+  const recommendDisabled =
+    busy != null || orderMissing || !argsValid || readOnly || orderResolved || refundBlocked;
 
   const recommend = async () => {
     setError(null);
@@ -670,10 +702,29 @@ function ActionCard({
       const payload: Record<string, unknown> = {};
       for (const f of fields) payload[f] = f === 'amount_cents' ? Number(args[f] ?? 0) : args[f] ?? '';
       await api.recommend(ticket.id, tool, payload);
+      // Clear the reason and remount fields so no stale "required" error lingers
+      // on the now-submitted action.
+      setArgs((prev) => ({ ...prev, reason: '' }));
+      setFormKey((k) => k + 1);
       await onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to recommend');
     }
+  };
+
+  // Human-readable action summary for the proposed/executed panel. Deliberately
+  // omits internal identifiers (order id, review id, idempotency key) and the raw
+  // reason — the agent sees the remedy and the amount/item, nothing sensitive.
+  const describeAction = (a: ToolCall): string => {
+    const aa = a.args as Record<string, unknown>;
+    if (a.toolName === 'start_refund_review') {
+      const cents = Number(aa.amount_cents ?? 0);
+      return cents > 0 ? `Refund of ${money(cents)} to the customer’s original payment method` : 'Refund to the customer';
+    }
+    if (a.toolName === 'create_replacement_order') {
+      return `Free replacement of ${order?.itemName ?? 'the item'} at no cost to the customer`;
+    }
+    return TOOL_LABELS[a.toolName] ?? a.toolName;
   };
 
   const decide = async (actionId: string, decision: 'approve' | 'reject') => {
@@ -710,11 +761,22 @@ function ActionCard({
               This ticket has no linked order, so an order-based action can’t be started here.
             </Alert>
           )}
+          {orderResolved && (
+            <Alert severity="success">
+              This order has already been {resolvedRemedy === 'refund' ? 'refunded' : 'replaced'}. An order can be
+              refunded or replaced, but not both.
+            </Alert>
+          )}
+          {!orderResolved && refundBlocked && (
+            <Alert severity="warning">
+              This item is non-refundable per policy (KB-REFUND-002). You can arrange a replacement instead.
+            </Alert>
+          )}
 
           {fields.map((f) =>
             isReadOnly(f) ? (
               <TextField
-                key={f}
+                key={`${f}-${formKey}`}
                 label={f}
                 size="small"
                 value={args[f] ?? ''}
@@ -724,17 +786,18 @@ function ActionCard({
               />
             ) : (
               <ValidatedTextField
-                key={f}
+                key={`${f}-${formKey}`}
                 label={f}
                 size="small"
                 value={args[f] ?? ''}
                 onChange={(v) => setArgs((prev) => ({ ...prev, [f]: v }))}
                 rules={FIELD_RULES[f] ?? []}
+                disabled={orderResolved || refundBlocked}
                 helperText={f === 'amount_cents' ? 'Editable — e.g. for a partial refund' : undefined}
               />
             ),
           )}
-          <Button variant="outlined" onClick={recommend} disabled={busy != null || orderMissing || !argsValid || readOnly}>
+          <Button variant="outlined" onClick={recommend} disabled={recommendDisabled}>
             Recommend action
           </Button>
         </Stack>
@@ -750,35 +813,58 @@ function ActionCard({
                 <Box key={a.id} sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center">
                     <Typography variant="body2" fontWeight={600}>
-                      {a.toolName}
+                      {TOOL_LABELS[a.toolName] ?? a.toolName}
                     </Typography>
                     <Chip
                       size="small"
-                      label={a.status}
+                      label={
+                        a.status === 'executed'
+                          ? 'Completed'
+                          : a.status === 'pending'
+                            ? 'Awaiting approval'
+                            : a.status === 'rejected'
+                              ? 'Rejected'
+                              : 'Failed'
+                      }
                       color={
                         a.status === 'executed' ? 'success' : a.status === 'rejected' ? 'error' : a.status === 'failed' ? 'error' : 'warning'
                       }
                     />
                   </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    <Mono>{JSON.stringify(a.args)}</Mono>
+                  <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                    {describeAction(a)}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    idempotency: <Mono>{a.idempotencyKey.slice(0, 12)}…</Mono>
-                  </Typography>
-                  {a.result && (
+                  {a.status === 'executed' && (
                     <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'success.main' }}>
-                      result: {JSON.stringify(a.result)}
+                      {a.toolName === 'start_refund_review'
+                        ? 'Refund approved — the customer was notified and the ticket resolved.'
+                        : 'Replacement arranged — the customer was notified and the ticket resolved.'}
+                    </Typography>
+                  )}
+                  {a.status === 'failed' && (
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'error.main' }}>
+                      This action couldn’t be completed. Please review and try again.
                     </Typography>
                   )}
                   {a.status === 'pending' && (
-                    <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                      <Button size="small" variant="contained" color="success" onClick={() => decide(a.id, 'approve')} disabled={readOnly}>
+                    <Stack direction="row" spacing={1} sx={{ mt: 1 }} alignItems="center">
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="success"
+                        onClick={() => decide(a.id, 'approve')}
+                        disabled={readOnly || orderResolved}
+                      >
                         Approve
                       </Button>
                       <Button size="small" variant="outlined" color="error" onClick={() => decide(a.id, 'reject')} disabled={readOnly}>
                         Reject
                       </Button>
+                      {orderResolved && (
+                        <Typography variant="caption" color="text.secondary">
+                          This order is already {resolvedRemedy === 'refund' ? 'refunded' : 'replaced'}
+                        </Typography>
+                      )}
                     </Stack>
                   )}
                 </Box>

@@ -239,7 +239,8 @@ export async function runEval(provider: LLMProvider = getProvider()): Promise<Ev
     for (;;) {
       const i = next++;
       if (i >= cases.length) return;
-      results[i] = await withTimeout(runOne(cases[i]), CASE_TIMEOUT_MS, () => timedOutResult(cases[i]));
+      const c = cases[i]!;
+      results[i] = await withTimeout(runOne(c), CASE_TIMEOUT_MS, () => timedOutResult(c));
     }
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, cases.length) }, () => worker()));

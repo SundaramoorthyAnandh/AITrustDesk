@@ -6,6 +6,7 @@ import { getTicketContext } from './context.js';
 import { writeTrace } from './traces.js';
 import { TriageResultSchema, type TriageResult } from '../llm/schemas.js';
 import { scanText, guardrailResultString } from '../domain/guardrails.js';
+import { keywordTriage } from '../domain/classify.js';
 import type { LLMProvider } from '../llm/provider.js';
 
 export interface TriageOutcome {
@@ -53,12 +54,17 @@ export async function runTriage(
     });
     triage = TriageResultSchema.parse(raw);
   } catch {
-    // Fail closed → escalate for human handling.
+    // Fail closed, but degrade gracefully: fall back to the deterministic keyword
+    // classifier (the same logic the mock uses) instead of a blind 'general'. This
+    // keeps the category sensible when the LLM errors or returns invalid JSON — a
+    // defect complaint stays 'warranty' so the draft can still ground + cite — and
+    // we still flag for human review since the model path failed.
+    const kw = keywordTriage(`${ctx.ticket.subject ?? ''}\n${ctx.ticket.body}`);
     triage = {
-      category: 'general',
-      priority: 'high',
+      category: kw.category,
+      priority: kw.priority,
       escalate: true,
-      reason: 'Triage validation failed; escalated for human review.',
+      reason: 'Triage model unavailable — used keyword classifier; flagged for review.',
     };
   }
 

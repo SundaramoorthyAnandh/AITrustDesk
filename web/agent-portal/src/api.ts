@@ -66,6 +66,8 @@ export interface Order {
   amountCents: number;
   currency: string;
   deliveredAt: string | null;
+  /** Refund eligibility (KB-REFUND-002). Absent → treat as refundable. */
+  refundable?: boolean;
 }
 export interface Draft {
   id: string;

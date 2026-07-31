@@ -317,6 +317,9 @@ export const products = sqliteTable('products', {
   priceCents: integer('price_cents').notNull().default(0),
   currency: text('currency').notNull().default('INR'),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  // Policy eligibility: non-refundable items (gift cards, digital, final-sale —
+  // see KB-REFUND-002) can never have a refund review started against them.
+  refundable: integer('refundable', { mode: 'boolean' }).notNull().default(true),
 });
 
 /* ───────────────────────────── Inferred types ───────────────────────────── */

@@ -90,6 +90,7 @@ interface RawProduct {
   price_cents?: number;
   currency?: string;
   active?: boolean;
+  refundable?: boolean;
 }
 
 export function loadAll(nowIso = new Date().toISOString()): { counts: Record<string, number> } {
@@ -239,10 +240,11 @@ export function loadAll(nowIso = new Date().toISOString()): { counts: Record<str
         priceCents: p.price_cents ?? 0,
         currency: 'INR',
         active: p.active ?? true,
+        refundable: p.refundable ?? true,
       })
       .onConflictDoUpdate({
         target: products.sku,
-        set: { name: p.name, priceCents: p.price_cents ?? 0, category: p.category ?? null },
+        set: { name: p.name, priceCents: p.price_cents ?? 0, category: p.category ?? null, refundable: p.refundable ?? true },
       })
       .run();
   }
